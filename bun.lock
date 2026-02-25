@@ -5,6 +5,7 @@
     "": {
       "name": "catmint-docs",
       "dependencies": {
+        "@catmint/adapter-vercel": "^0.0.0-prealpha.1",
         "@catmint/cli": "0.0.0-prealpha.1",
         "@catmint/vite": "0.0.0-prealpha.1",
         "@shikijs/rehype": "^3.22.0",
@@ -26,6 +27,8 @@
     },
   },
   "packages": {
+    "@catmint/adapter-vercel": ["@catmint/adapter-vercel@0.0.0-prealpha.1", "", { "dependencies": { "catmint": "0.0.0-prealpha.1" } }, "sha512-vwZS8t8QStYgP5R9hu+0rzmx8cSbRq3BL4J2Z3Cu6oknI9ZdYO7onXNMpubl6/NYVuEMcrVbhZAt9OdujVmyQw=="],
+
     "@catmint/cli": ["@catmint/cli@0.0.0-prealpha.1", "", { "dependencies": { "@catmint/vite": "0.0.0-prealpha.1", "catmint": "0.0.0-prealpha.1", "vite": "^6.0.0" }, "bin": { "catmint": "bin/catmint.js" } }, "sha512-DtlAW5TPmDaFVC8zpXWN8B9D4cTlCQSLPR9sYtr/5gTN+PpcplZ06p02ZvWUISNY5YuGFqXHJLDd7WzIqAR4RQ=="],
 
     "@catmint/vite": ["@catmint/vite@0.0.0-prealpha.1", "", { "dependencies": { "@mdx-js/mdx": "^3.1.1", "@swc/core": "^1.15.11", "@vitejs/plugin-rsc": "^0.5.20", "estree-walker": "^3.0.3", "magic-string": "^0.30.21", "rsc-html-stream": "^0.0.7" }, "peerDependencies": { "vite": "^6.0.0" } }, "sha512-NHF7+CSa2BwXgI63kBRyWOceE04mPSB77VJGsXoo3gkhSPoN031p8VzL43BP/mMYwKy8czdGz8y/SI19eSXATQ=="],

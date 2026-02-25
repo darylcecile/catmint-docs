@@ -2,6 +2,7 @@ import { defineConfig } from "catmint/config";
 import tailwindcss from "@tailwindcss/vite";
 import remarkGfm from "remark-gfm";
 import rehypeShiki from "@shikijs/rehype";
+import vercel from "@catmint/adapter-vercel";
 
 export default defineConfig({
   mode: "fullstack",
@@ -14,6 +15,7 @@ export default defineConfig({
   vite: {
     plugins: [tailwindcss()],
   },
+  adapter: vercel(),
   mdx: {
     remarkPlugins: [remarkGfm],
     rehypePlugins: [
