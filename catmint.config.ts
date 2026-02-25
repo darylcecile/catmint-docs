@@ -15,7 +15,12 @@ export default defineConfig({
   vite: {
     plugins: [tailwindcss()],
     ssr: {
-      noExternal: ["@radix-ui/**", "cmdk", "tslib"],
+      noExternal: [
+        "@radix-ui/primitive",
+        "aria-hidden",
+        "get-nonce",
+        "tslib",
+      ],
     },
   },
   adapter: vercel(),
