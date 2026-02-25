@@ -14,6 +14,9 @@ export default defineConfig({
   },
   vite: {
     plugins: [tailwindcss()],
+    ssr: {
+      noExternal: ["@radix-ui/**", "cmdk"],
+    },
   },
   adapter: vercel(),
   mdx: {
