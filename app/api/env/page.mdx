@@ -1,0 +1,94 @@
+# env
+
+Type-safe environment variable access with server/client separation. Private variables are server-only, public variables are safe everywhere, and `env.location` is a compile-time constant.
+
+## Import
+
+```ts
+import { env } from 'catmint/env'
+```
+
+## Signature
+
+```ts
+const env: {
+  private: PrivateEnv
+  public: PublicEnv
+  location: 'server' | 'client'
+}
+```
+
+## Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `env.private` | `PrivateEnv` | Server-only environment variables. Accessing these in client code causes a build-time error. Reads directly from `process.env`. |
+| `env.public` | `PublicEnv` | Public environment variables safe for use anywhere. Reads from `process.env.CATMINT_PUBLIC_*` — the `CATMINT_PUBLIC_` prefix is stripped automatically. |
+| `env.location` | `'server' \| 'client'` | Compile-time constant indicating the current environment. Evaluates to `'server'` when `window` is undefined, `'client'` otherwise. |
+
+### `PrivateEnv`
+
+```ts
+interface PrivateEnv {
+  [key: string]: string | undefined
+}
+```
+
+A `Proxy` over `process.env`. Access any environment variable by name. Extended by the auto-generated `env.d.ts` in user projects for type safety.
+
+### `PublicEnv`
+
+```ts
+interface PublicEnv {
+  [key: string]: string | undefined
+}
+```
+
+A `Proxy` that reads from `process.env.CATMINT_PUBLIC_{key}`. For example, `env.public.URL` reads `process.env.CATMINT_PUBLIC_URL`. Extended by the auto-generated `env.d.ts` in user projects for type safety.
+
+## Examples
+
+```ts
+import { env } from 'catmint/env'
+
+// Server-only — reading DB_HOST from process.env
+const dbHost = env.private.DB_HOST
+
+// Public — reading CATMINT_PUBLIC_URL from process.env
+const appUrl = env.public.URL
+
+// Compile-time environment check
+if (env.location === 'server') {
+  // Server-only logic
+}
+```
+
+```ts
+// In a server component or server function
+import { env } from 'catmint/env'
+
+export async function getDbConnection() {
+  return createConnection({
+    host: env.private.DB_HOST,
+    password: env.private.DB_PASSWORD,
+  })
+}
+```
+
+```ts
+// In a client component — only public vars are available
+import { env } from 'catmint/env'
+
+function ApiClient() {
+  const baseUrl = env.public.API_URL
+  // env.private.SECRET would cause a build-time error
+}
+```
+
+## Type Safety
+
+Catmint auto-generates an `env.d.ts` file in your project that extends `PrivateEnv` and `PublicEnv` with the actual variable names found in your `.env` files, providing autocomplete and type checking.
+
+## See Also
+
+- [defineConfig](/api/config) (`env.autoLoad` option)

@@ -1,0 +1,331 @@
+# Styling
+
+Catmint supports multiple styling approaches out of the box, including plain CSS,
+CSS Modules, Tailwind CSS, SCSS, and CSS-in-JS libraries. Styles are processed
+through Vite and benefit from hot module replacement during development.
+
+## Global CSS
+
+Import global CSS files in your root layout to apply styles across the entire
+application. The import is processed by Vite and included in the final bundle.
+
+```css
+/* app/globals.css */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  line-height: 1.6;
+  color: #1a1a1a;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+```
+
+```tsx
+// app/layout.tsx
+import React from 'react'
+import './globals.css'
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  return (
+    <html lang="en">
+      <head>
+        <meta charSet="utf-8" />
+      </head>
+      <body>{children}</body>
+    </html>
+  )
+}
+```
+
+You can also import CSS files in page or component files. Vite will deduplicate
+and bundle them correctly.
+
+## CSS Modules
+
+CSS Modules scope class names to the component that imports them, preventing
+name collisions. Use the `.module.css` extension
+to enable CSS Module behavior.
+
+```css
+/* app/components/Card.module.css */
+.card {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 1.5rem;
+  background: #ffffff;
+}
+
+.title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.body {
+  color: #6b7280;
+  line-height: 1.6;
+}
+```
+
+```tsx
+// app/components/Card.tsx
+import styles from './Card.module.css'
+
+export function Card({ title, children }: {
+  title: string
+  children: React.ReactNode
+}) {
+  return (
+    <div className={styles.card}>
+      <h2 className={styles.title}>{title}</h2>
+      <div className={styles.body}>{children}</div>
+    </div>
+  )
+}
+```
+
+At build time, class names are transformed to unique identifiers (e.g., `Card_card_1a2b3`),
+ensuring no conflicts between components.
+
+## Tailwind CSS
+
+Tailwind CSS is a utility-first CSS framework that works well with Catmint.
+Install it and create the configuration file:
+
+### Installation
+
+```bash
+pnpm add -D tailwindcss @tailwindcss/vite
+```
+
+### Vite Plugin
+
+Add the Tailwind CSS Vite plugin to your `vite.config.ts`:
+
+```ts
+// vite.config.ts
+import { defineConfig } from 'vite'
+import catmint from 'catmint-vite'
+import tailwindcss from '@tailwindcss/vite'
+
+export default defineConfig({
+  plugins: [catmint(), tailwindcss()],
+})
+```
+
+### CSS Entry Point
+
+Import Tailwind in your global CSS file:
+
+```css
+/* app/globals.css */
+@import "tailwindcss";
+```
+
+### Usage
+
+Apply Tailwind utility classes directly in your components:
+
+```tsx
+// app/page.tsx
+export default function HomePage() {
+  return (
+    <div className="max-w-2xl mx-auto px-4 py-12">
+      <h1 className="text-4xl font-bold text-gray-900 mb-4">
+        Welcome to My App
+      </h1>
+      <p className="text-lg text-gray-600 mb-8">
+        Built with Catmint and Tailwind CSS.
+      </p>
+      <a
+        href="/docs"
+        className="inline-block bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors"
+      >
+        Read the Docs
+      </a>
+    </div>
+  )
+}
+```
+
+## SCSS
+
+Catmint supports SCSS through Vite's built-in preprocessor support. Install `sass` as a dev dependency:
+
+```bash
+pnpm add -D sass
+```
+
+Then use `.scss` files
+anywhere you would use `.css` files.
+SCSS Modules are also supported with the `.module.scss` extension.
+
+```scss
+/* app/components/Button.module.scss */
+$primary: #3b82f6;
+$primary-hover: #2563eb;
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem;
+  font-weight: 500;
+  transition: background-color 150ms;
+
+  &.primary {
+    background-color: $primary;
+    color: white;
+
+    &:hover {
+      background-color: $primary-hover;
+    }
+  }
+
+  &.secondary {
+    background-color: transparent;
+    border: 1px solid $primary;
+    color: $primary;
+  }
+}
+```
+
+```tsx
+// app/components/Button.tsx
+import styles from './Button.module.scss'
+
+export function Button({
+  variant = 'primary',
+  children,
+}: {
+  variant?: 'primary' | 'secondary'
+  children: React.ReactNode
+}) {
+  return (
+    <button className={`${styles.button} ${styles[variant]}`}>
+      {children}
+    </button>
+  )
+}
+```
+
+## CSS-in-JS
+
+CSS-in-JS libraries that support server-side rendering work with Catmint. Libraries
+that extract styles at build time (such as vanilla-extract or Panda CSS) are
+preferred because they avoid runtime overhead.
+
+For runtime CSS-in-JS libraries (such as styled-components or Emotion), you
+need to configure SSR style extraction to avoid a flash of unstyled content.
+Consult the library's documentation for SSR setup instructions.
+
+```ts
+// Example: vanilla-extract (build-time CSS-in-JS)
+// app/components/Card.css.ts
+import { style } from '@vanilla-extract/css'
+
+export const card = style({
+  border: '1px solid #e5e7eb',
+  borderRadius: '8px',
+  padding: '1.5rem',
+})
+
+export const title = style({
+  fontSize: '1.25rem',
+  fontWeight: 600,
+})
+```
+
+```tsx
+// app/components/Card.tsx
+import * as styles from './Card.css'
+
+export function Card({ title, children }: {
+  title: string
+  children: React.ReactNode
+}) {
+  return (
+    <div className={styles.card}>
+      <h2 className={styles.title}>{title}</h2>
+      {children}
+    </div>
+  )
+}
+```
+
+## Static Assets
+
+Static files such as images, fonts, and icons should be placed in the `app/public/` directory.
+Files in this directory are served as-is at the root URL path without processing.
+
+```txt
+app/
+  public/
+    favicon.ico          -> /favicon.ico
+    robots.txt           -> /robots.txt
+    images/
+      logo.svg           -> /images/logo.svg
+    fonts/
+      inter.woff2        -> /fonts/inter.woff2
+```
+
+Reference static assets in your components and CSS using absolute paths:
+
+```tsx
+// In a component
+<img src="/images/logo.svg" alt="Logo" />
+
+// In CSS
+@font-face {
+  font-family: 'Inter';
+  src: url('/fonts/inter.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+}
+```
+
+## Importing Assets in Components
+
+For assets that should be processed by Vite (hashed filenames, optimization),
+import them directly in your component files. Vite will handle bundling and
+cache-busting:
+
+```tsx
+// app/components/Header.tsx
+import logoUrl from '../assets/logo.svg'
+
+export function Header() {
+  return (
+    <header>
+      <img src={logoUrl} alt="Logo" />
+    </header>
+  )
+}
+// logoUrl resolves to something like /assets/logo-a1b2c3.svg
+```
+
+## Summary
+
+| Approach | File Extension | Scoping | Setup |
+| --- | --- | --- | --- |
+| Global CSS | `.css` | Global | None |
+| CSS Modules | `.module.css` | Component | None |
+| Tailwind CSS | `.css` | Utility classes | `pnpm add -D tailwindcss @tailwindcss/vite` |
+| SCSS | `.scss` | Global or Module | `pnpm add -D sass` |
+| SCSS Modules | `.module.scss` | Component | `pnpm add -D sass` |
+| CSS-in-JS | `.css.ts` | Component | Library-specific |

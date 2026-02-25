@@ -1,0 +1,135 @@
+# layout
+
+Wrap a layout component with configuration options. Layout files (`layout.tsx`) are placed in route directories and automatically collected by the file-based router. They nest from root to leaf, with each layout receiving a `children` prop containing the next layout or the page component.
+
+A bare `export default` works for simple layouts — the `layout()` wrapper is only needed when you want to configure inheritance behavior.
+
+## Import
+
+```ts
+import { layout } from 'catmint/layout'
+```
+
+## Signature
+
+```ts
+function layout<P extends { children?: ReactNode }>(
+  component: ComponentType<P>,
+  options?: LayoutOptions,
+): LayoutComponent<P>
+```
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `component` | `ComponentType<P>` | Yes | The React component to use as a layout. Must accept a `children` prop. |
+| `options` | `LayoutOptions` | No | Layout configuration options. |
+
+### `LayoutOptions`
+
+```ts
+interface LayoutOptions {
+  inherit?: boolean
+  name?: string
+}
+```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `inherit` | `boolean` | `true` | Whether to nest inside parent layouts. Set to `false` to make this layout standalone. |
+| `name` | `string` | Derived from directory | Explicit name for debugging and React DevTools. |
+
+## Return Value
+
+Returns a `LayoutComponent<P>` — the original component with attached layout metadata.
+
+```ts
+type LayoutComponent<P extends { children?: ReactNode }> =
+  ComponentType<P> & {
+    __catmintLayout: LayoutOptions
+    __originalComponent: ComponentType<P>
+  }
+```
+
+The component's `displayName` is set to `options.name`, the component's own `displayName`/`name`, or `'CatmintLayout'` as a fallback.
+
+## Layout Resolution
+
+When a page is requested, Catmint walks up the directory tree from the page to `app/`:
+
+1. Each `layout.tsx` encountered is added to the layout chain.
+2. If a layout uses `layout(..., { inherit: false })`, the chain stops — no further ancestors are included.
+3. The chain renders from outermost to innermost, with the page as the innermost child.
+
+Layouts are **not** re-rendered when navigating between sibling pages — only the child content swaps.
+
+## Companion Files
+
+| File | Relationship |
+|------|-------------|
+| `loading.tsx` | Rendered inside the layout as a Suspense fallback while the page loads. |
+| `error.tsx` | Rendered inside the layout as an error boundary when the page throws. |
+
+## Examples
+
+```tsx
+// app/layout.tsx — Root layout (no import needed for simple case)
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html>
+      <body>{children}</body>
+    </html>
+  )
+}
+```
+
+```tsx
+// app/admin/layout.tsx — Nested layout (inherits root)
+import { layout } from 'catmint/layout'
+
+export default layout(function AdminLayout({ children }) {
+  return (
+    <div className="admin-shell">
+      <AdminSidebar />
+      <main>{children}</main>
+    </div>
+  )
+})
+```
+
+```tsx
+// app/auth/layout.tsx — Standalone layout (does NOT inherit parent layouts)
+import { layout } from 'catmint/layout'
+
+export default layout(function AuthLayout({ children }) {
+  return (
+    <div className="auth-page">
+      {children}
+    </div>
+  )
+}, { inherit: false })
+```
+
+### Directory Structure
+
+```txt
+app/
+├── layout.tsx              # Root layout (navbar, footer)
+├── page.tsx                # / → RootLayout → Page
+├── dashboard/
+│   ├── layout.tsx          # Nests inside RootLayout
+│   ├── page.tsx            # /dashboard → RootLayout → DashboardLayout → Page
+│   └── settings/
+│       └── page.tsx        # /dashboard/settings → RootLayout → DashboardLayout → Page
+└── auth/
+    ├── layout.tsx          # layout(..., { inherit: false })
+    └── login/
+        └── page.tsx        # /auth/login → AuthLayout → LoginPage (no RootLayout)
+```
+
+## See Also
+
+- [Middleware](/api/middleware)
+- [statusResponse](/api/statusResponse)
+- [defineRoutes](/api/defineRoutes)

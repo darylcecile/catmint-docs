@@ -1,0 +1,143 @@
+# statusResponse
+
+Trigger a status page response. Throws a `StatusError` internally — this function never returns. The framework catches the error and renders the nearest status page file (e.g., `404.tsx`, `500.tsx`) with the given data as props.
+
+## Import
+
+```ts
+import { statusResponse } from 'catmint/status'
+```
+
+## Signature
+
+```ts
+function statusResponse(
+  code: number,
+  data?: Record<string, unknown>,
+): never
+```
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `code` | `number` | Yes | HTTP status code (e.g., `404`, `500`, `403`). |
+| `data` | `Record<string, unknown>` | No | Optional data payload passed to the status page component as props. |
+
+## Return Value
+
+This function never returns. It always throws a `StatusError`.
+
+## Status Page Resolution
+
+When `statusResponse(code)` is called, Catmint resolves the status page by walking up from the current route's directory toward `app/`:
+
+1. Check the current route's directory for `{code}.tsx`
+2. Walk up each parent directory
+3. Stop at `app/{code}.tsx` (root-level fallback)
+4. If no matching file is found, render a default built-in error page
+
+This allows nested directories to override status pages for their subtree.
+
+## Behavior by Context
+
+| Context | Behavior |
+|---------|----------|
+| Page component | Renders the nearest `{code}.tsx` within the current layout chain. |
+| Endpoint | Sets the HTTP status code on the response and renders the nearest status page. |
+| Middleware | Short-circuits the chain and renders the nearest status page. |
+| Server function | Throws a `StatusError` that propagates to the calling page or endpoint. |
+
+## Related: `StatusError`
+
+```ts
+class StatusError extends Error {
+  readonly statusCode: number
+  readonly data?: Record<string, unknown>
+
+  constructor(statusCode: number, data?: Record<string, unknown>)
+}
+```
+
+You can check for status errors using `isStatusError`:
+
+```ts
+import { isStatusError } from 'catmint/status'
+
+if (isStatusError(error)) {
+  console.log(error.statusCode, error.data)
+}
+```
+
+## Examples
+
+```tsx
+// In a page component
+import { statusResponse } from 'catmint/status'
+
+export default async function DashboardPage() {
+  const user = await getUser()
+  if (!user) {
+    statusResponse(403, { message: 'You must be logged in' })
+  }
+  return <div>Welcome, {user.name}</div>
+}
+```
+
+```ts
+// In an endpoint
+import { statusResponse } from 'catmint/status'
+
+export async function GET(
+  req: Request,
+  { params }: { params: { id: string } }
+) {
+  const post = await db.posts.findById(params.id)
+  if (!post) {
+    statusResponse(404, { resource: 'post', id: params.id })
+  }
+  return Response.json(post)
+}
+```
+
+```tsx
+// Status page component — receives data as props
+// app/404.tsx
+export default function NotFound({
+  resource,
+  id,
+}: {
+  resource?: string
+  id?: string
+}) {
+  return (
+    <div>
+      <h1>404 — Not Found</h1>
+      {resource && (
+        <p>
+          The {resource} {id ? `(${id})` : ''} could not be found.
+        </p>
+      )}
+    </div>
+  )
+}
+```
+
+### Directory Structure
+
+```txt
+app/
+├── 404.tsx                   # Global 404 handler
+├── 500.tsx                   # Global 500 handler
+├── page.tsx
+└── dashboard/
+    ├── 403.tsx               # 403 handler for /dashboard/* (overrides root)
+    ├── 404.tsx               # 404 handler for /dashboard/* (overrides root)
+    └── page.tsx
+```
+
+## See Also
+
+- [redirect](/api/redirect)
+- [Middleware](/api/middleware)
+- [Endpoints](/api/endpoints)

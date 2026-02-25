@@ -1,0 +1,117 @@
+# defineConfig
+
+Define and validate the Catmint framework configuration. Accepts a partial configuration object, validates all fields, and returns a fully-resolved configuration with defaults applied.
+
+## Import
+
+```ts
+import { defineConfig } from 'catmint/config'
+```
+
+## Signature
+
+```ts
+function defineConfig(config: CatmintConfig): ResolvedCatmintConfig
+```
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `config` | `CatmintConfig` | Yes | Partial configuration object. All fields are optional and will be filled with defaults. |
+
+### `CatmintConfig`
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `mode` | `'backend' \| 'frontend' \| 'fullstack'` | `'fullstack'` | Deployment mode. |
+| `server.port` | `number` | `3000` | Server port (0–65535). |
+| `server.host` | `string` | `'0.0.0.0'` | Server host. |
+| `env.autoLoad` | `boolean` | `true` | Whether to auto-load `.env` files. |
+| `build.outDir` | `string` | `'dist'` | Build output directory. |
+| `build.target` | `string` | `'es2022'` | Build target. |
+| `build.sourcemap` | `boolean` | `true` | Enable source maps. |
+| `i18n.locales` | `string[]` | — | List of supported locales (required if `i18n` is set). |
+| `i18n.defaultLocale` | `string` | First locale | Default locale. |
+| `i18n.strategy` | `'prefix' \| 'prefix-except-default'` | `'prefix-except-default'` | URL prefix strategy. |
+| `telemetry.enabled` | `boolean` | `false` | Enable OpenTelemetry. |
+| `telemetry.serviceName` | `string` | — | Service name for traces. |
+| `telemetry.exporter` | `'otlp' \| 'console'` | `'otlp'` | Telemetry exporter. |
+| `telemetry.endpoint` | `string` | `'http://localhost:4318'` | OTLP endpoint URL. |
+| `telemetry.sampleRate` | `number` | `1.0` | Sampling rate (0–1). |
+| `telemetry.propagation` | `'w3c' \| 'b3'` | `'w3c'` | Context propagation format. |
+| `vite` | `Record<string, unknown>` | `{}` | Vite config overrides (escape hatch). |
+| `plugins` | `unknown[]` | `[]` | Catmint plugins. |
+| `adapter` | `CatmintAdapter` | — | Deployment adapter. |
+
+## Return Value
+
+Returns a `ResolvedCatmintConfig` object with all defaults applied. Every required field is guaranteed to be present.
+
+```ts
+interface ResolvedCatmintConfig {
+  mode: CatmintMode
+  server: { port: number; host: string }
+  env: { autoLoad: boolean }
+  build: { outDir: string; target: string; sourcemap: boolean }
+  vite: Record<string, unknown>
+  i18n?: { locales: string[]; defaultLocale: string; strategy: 'prefix' | 'prefix-except-default' }
+  telemetry?: { enabled: boolean; serviceName?: string; exporter: 'otlp' | 'console'; endpoint: string; sampleRate: number; propagation: 'w3c' | 'b3' }
+  plugins: unknown[]
+  adapter?: CatmintAdapter
+}
+```
+
+## Validation
+
+`defineConfig` throws a `ConfigValidationError` if any field is invalid:
+
+- `mode` must be `'backend'`, `'frontend'`, or `'fullstack'`
+- `server.port` must be a finite number between 0 and 65535
+- `i18n.locales` must be a non-empty array of non-empty strings
+- `telemetry.sampleRate` must be between 0 and 1
+
+```ts
+class ConfigValidationError extends Error {
+  readonly field: string
+}
+```
+
+## Examples
+
+```ts
+// catmint.config.ts — minimal
+import { defineConfig } from 'catmint/config'
+
+export default defineConfig({})
+```
+
+```ts
+// catmint.config.ts — fullstack with options
+import { defineConfig } from 'catmint/config'
+
+export default defineConfig({
+  mode: 'fullstack',
+  server: { port: 3000 },
+  build: { outDir: 'dist', sourcemap: true },
+  i18n: {
+    locales: ['en', 'fr', 'de'],
+    defaultLocale: 'en',
+  },
+})
+```
+
+```ts
+// catmint.config.ts — backend-only API server
+import { defineConfig } from 'catmint/config'
+
+export default defineConfig({
+  mode: 'backend',
+  server: { port: 8080, host: 'localhost' },
+})
+```
+
+## See Also
+
+- [Endpoints](/api/endpoints)
+- [Middleware](/api/middleware)

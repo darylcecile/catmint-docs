@@ -1,0 +1,75 @@
+# generateMetadata
+
+Async function for producing data-dependent metadata during server rendering. Export this function from a `page.tsx` or `layout.tsx` file and the framework will call it at render time to generate head tags.
+
+## Import
+
+```ts
+import { generateMetadata } from 'catmint/head'
+```
+
+## Signature
+
+```ts
+async function generateMetadata(props: {
+  params: Record<string, string | string[]>
+  search: Record<string, string>
+}): Promise<HeadConfig>
+```
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `props` | `object` | Yes | Route context object |
+| `props.params` | `Record<string, string \| string[]>` | Yes | Dynamic route parameters (e.g. `{ slug: 'hello' }`) |
+| `props.search` | `Record<string, string>` | Yes | URL search/query parameters |
+
+## Return Value
+
+Returns `Promise<HeadConfig>` — a head configuration object with optional `title`, `meta`, and `link` fields.
+
+### `HeadConfig`
+
+```ts
+interface HeadConfig {
+  title?: string
+  meta?: Array<{ name?: string; property?: string; content: string }>
+  link?: Array<{ rel: string; href: string; [key: string]: string }>
+}
+```
+
+## Examples
+
+```ts
+// app/blog/[slug]/page.tsx
+export async function generateMetadata({ params }) {
+  const post = await db.posts.findBySlug(params.slug)
+  return {
+    title: post.title,
+    meta: [
+      { name: 'description', content: post.excerpt },
+      { property: 'og:title', content: post.title },
+      { property: 'og:image', content: post.coverImage },
+    ],
+  }
+}
+```
+
+```ts
+// app/products/[id]/page.tsx
+export async function generateMetadata({ params, search }) {
+  const product = await getProduct(params.id)
+  return {
+    title: `${product.name} | My Store`,
+    link: [
+      { rel: 'canonical', href: `https://mystore.com/products/${params.id}` },
+    ],
+  }
+}
+```
+
+## See Also
+
+- [Head](/api/Head)
+- [useHead](/api/useHead)

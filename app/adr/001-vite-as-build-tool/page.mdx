@@ -1,0 +1,73 @@
+# ADR-001: Vite as Build Tool
+
+## Status
+
+Accepted
+
+## Context
+
+Catmint is a TypeScript-first, full-stack React framework that supports three deployment modes (backend-only, frontend-only, fullstack), React Server Components, server functions, and file-based routing. The build tool must handle:
+
+- ES module-based development with fast iteration cycles
+- Server-side rendering and RSC streaming
+- Separate server and client bundles with boundary enforcement
+- Compile-time transforms (e.g., auto-injecting `"use client"` directives, converting server functions to `fetch()` stubs)
+- Plugin-based extensibility for framework-specific behavior
+- Production-optimized output with code splitting and tree shaking
+
+The framework needs a build tool that is fast in development, reliable in production, and extensible enough to support Catmint's custom compilation transforms.
+
+## Decision
+
+Catmint uses **Vite 6+** as its build tool and development server. All build pipeline functionality — route resolution, server bundling, and client bundling — runs through Vite. Framework-specific transforms are implemented as a dedicated Vite plugin (`catmint-vite`).
+
+The architecture is structured as:
+
+```txt
+┌─────────────────────────────────────────────────┐
+│              Build Pipeline (Vite)              │
+│  ┌──────────┐ ┌──────────┐ ┌──────────────────┐│
+│  │ Route    │ │ Server   │ │ Client Bundle    ││
+│  │ Resolver │ │ Bundle   │ │ (React, Hydrate) ││
+│  └──────────┘ └──────────┘ └──────────────────┘│
+└─────────────────────────────────────────────────┘
+```
+
+The `catmint-vite` plugin handles:
+
+- File-name convention enforcement (`.server.tsx`, `.client.tsx`, `.fn.ts`)
+- Automatic `"use client"` directive injection for `*.client.tsx` and `error.tsx` files
+- Server function compilation (replacing `createServerFn` calls with `fetch()` stubs in the client bundle)
+- Blocking invalid cross-boundary imports (e.g., importing `*.server.ts` from client code)
+- `env.private.*` access detection in client code (build-time error)
+
+## Rationale
+
+- **Native ES module support.** Vite serves source files as ES modules during development, eliminating bundling overhead and enabling sub-second startup times regardless of project size.
+- **Fast HMR.** Vite's hot module replacement operates at the module level, updating only changed files. This is critical for a framework that encourages colocated server and client components.
+- **Rollup-based production builds.** Vite uses Rollup under the hood for production, providing mature code splitting, tree shaking, and chunk optimization. This produces efficient server and client bundles.
+- **First-class SSR support.** Vite has built-in SSR capabilities including `ssrLoadModule`, separate server/client build pipelines, and module externalization — all of which Catmint's RSC streaming relies on.
+- **Plugin ecosystem.** Vite's plugin API (compatible with Rollup plugins) allows Catmint to implement framework transforms as a standard plugin (`catmint-vite`) rather than forking or wrapping the build tool. Developers can also layer on community Vite plugins for features like image optimization, PWA support, and CSS preprocessing.
+- **Environment variable conventions.** Vite's `import.meta.env` pattern aligns with Catmint's `CATMINT_PUBLIC_*` prefix convention for client-safe environment variables.
+
+## Alternatives Considered
+
+- **webpack.** Mature and highly configurable, but significantly slower in development due to full-bundle architecture. The configuration complexity is at odds with Catmint's "minimal ceremony" principle. Webpack's HMR is slower and less reliable than Vite's module-level replacement.
+- **Turbopack.** Promising incremental build system from Vercel, but tightly coupled to the Next.js ecosystem. As of the decision date, Turbopack was not stable enough for production use outside Next.js and lacked the plugin API needed for Catmint's custom transforms.
+- **Parcel.** Zero-config bundler with good defaults, but limited plugin API for the kind of compile-time transforms Catmint requires (boundary enforcement, server function compilation). Less control over output structure.
+- **esbuild.** Extremely fast bundler, but lacks a plugin system expressive enough for Catmint's needs (no AST-level transforms). No built-in dev server or HMR. Would require significant wrapper code to match Vite's developer experience.
+
+## Consequences
+
+**Positive:**
+
+- Developers get near-instant dev server startup and fast HMR out of the box.
+- The `catmint-vite` plugin architecture keeps framework transforms modular and testable.
+- Existing Vite community plugins (e.g., for SVG, MDX, Tailwind) work with Catmint projects without additional configuration.
+- Production builds benefit from Rollup's mature optimization pipeline.
+
+**Negative:**
+
+- Catmint is coupled to the Vite ecosystem. Major Vite breaking changes require corresponding updates to `catmint-vite`.
+- Developers must understand Vite configuration to debug advanced build issues.
+- Some Vite limitations (e.g., CommonJS module handling edge cases) are inherited by Catmint.

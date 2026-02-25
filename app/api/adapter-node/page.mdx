@@ -1,0 +1,75 @@
+# adapter-node
+
+Node.js adapter for Catmint. Produces a standalone Node.js server from the Catmint build output that can be started with `node dist/server/index.js`.
+
+## Import
+
+```ts
+import node from 'catmint-adapter-node'
+```
+
+## Signature
+
+```ts
+function nodeAdapter(options?: NodeAdapterOptions): CatmintAdapter
+```
+
+The default export is the `nodeAdapter` factory function.
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `options` | `NodeAdapterOptions` | No | Configuration for the Node.js server. |
+
+### `NodeAdapterOptions`
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `port` | `number` | `3000` | Port to listen on. |
+| `host` | `string` | `'0.0.0.0'` | Host to bind to. |
+
+## Return Value
+
+Returns a `CatmintAdapter` object with `name: '@catmint/adapter-node'`. When the `adapt()` method is called during build, it:
+
+1. Generates a standalone server entry point at `dist/server/index.js`
+2. Bundles the routing, middleware, and server function handlers
+
+## Examples
+
+```ts
+// catmint.config.ts
+import { defineConfig } from 'catmint/config'
+import node from 'catmint-adapter-node'
+
+export default defineConfig({
+  adapter: node(),
+})
+```
+
+```ts
+// With custom port and host
+import { defineConfig } from 'catmint/config'
+import node from 'catmint-adapter-node'
+
+export default defineConfig({
+  adapter: node({
+    port: 8080,
+    host: 'localhost',
+  }),
+})
+```
+
+After building, start the server:
+
+```sh
+node dist/server/index.js
+```
+
+## See Also
+
+- [CatmintAdapter](/api/CatmintAdapter)
+- [adapter-vercel](/api/adapter-vercel)
+- [adapter-cloudflare](/api/adapter-cloudflare)
+- [defineConfig](/api/config)

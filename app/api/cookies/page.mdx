@@ -1,0 +1,147 @@
+# cookies
+
+Isomorphic cookie API that works transparently on both server and client. On the server, it reads from the incoming `Request` Cookie header and writes `Set-Cookie` headers on the Response via AsyncLocalStorage. On the client, it reads from and writes to `document.cookie`.
+
+## Import
+
+```ts
+import { cookies } from 'catmint/cookies'
+```
+
+## Methods
+
+### `cookies.get(name)`
+
+```ts
+cookies.get(name: string): string | undefined
+```
+
+Read a cookie value by name.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name` | `string` | Yes | Cookie name to read |
+
+**Returns:** `string | undefined` — The cookie value, or `undefined` if not found.
+
+### `cookies.getWithOptions(name)`
+
+```ts
+cookies.getWithOptions(name: string): CookieWithOptions | undefined
+```
+
+Read a cookie with full metadata. On the server, returns the cookie value and any options set during this request. On the client, only the value is available.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name` | `string` | Yes | Cookie name to read |
+
+**Returns:** `CookieWithOptions | undefined`
+
+### `cookies.set(name, value, options?)`
+
+```ts
+cookies.set(name: string, value: string, options?: CookieOptions): void
+```
+
+Set a cookie. On the server, queues a `Set-Cookie` header with secure defaults (`httpOnly: true`, `secure: true` in production, `sameSite: 'lax'`, `path: '/'`). On the client, sets via `document.cookie` (cannot set `httpOnly` cookies).
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name` | `string` | Yes | Cookie name |
+| `value` | `string` | Yes | Cookie value |
+| `options` | `CookieOptions` | No | Cookie configuration options |
+
+### `cookies.delete(name)`
+
+```ts
+cookies.delete(name: string): void
+```
+
+Delete a cookie by name.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name` | `string` | Yes | Cookie name to delete |
+
+### `cookies.has(name)`
+
+```ts
+cookies.has(name: string): boolean
+```
+
+Check if a cookie exists.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name` | `string` | Yes | Cookie name to check |
+
+**Returns:** `boolean`
+
+### `cookies.getAll()`
+
+```ts
+cookies.getAll(): Record<string, string>
+```
+
+Get all cookies as a name-value record. On the server, reflects both incoming cookies and any mutations made during this request.
+
+**Returns:** `Record<string, string>`
+
+## Types
+
+### `CookieOptions`
+
+```ts
+interface CookieOptions {
+  path?: string
+  domain?: string
+  maxAge?: number
+  expires?: Date
+  httpOnly?: boolean
+  secure?: boolean
+  sameSite?: 'strict' | 'lax' | 'none'
+}
+```
+
+### `CookieWithOptions`
+
+```ts
+interface CookieWithOptions {
+  value: string
+  path?: string
+  domain?: string
+  maxAge?: number
+  expires?: Date
+  httpOnly?: boolean
+  secure?: boolean
+  sameSite?: 'strict' | 'lax' | 'none'
+}
+```
+
+## Examples
+
+```ts
+import { cookies } from 'catmint/cookies'
+
+// Read a cookie
+const token = cookies.get('session_token')
+
+// Set a cookie with options
+cookies.set('theme', 'dark', { maxAge: 60 * 60 * 24 * 365 })
+
+// Delete a cookie
+cookies.delete('session_token')
+
+// Check existence
+if (cookies.has('session_token')) {
+  // ...
+}
+
+// Get all cookies
+const all = cookies.getAll()
+```
+
+## See Also
+
+- [headers](/api/headers)

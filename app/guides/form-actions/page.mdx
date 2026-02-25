@@ -1,0 +1,300 @@
+# Form Actions
+
+Catmint provides a `<Form>` component that submits data to server functions with progressive enhancement. Forms work without client-side JavaScript, include automatic CSRF protection, and integrate with the `useFormAction()` hook for loading, error, and success state.
+
+## Basic Usage
+
+Import `<Form>` from `catmint/form` and point its `action` prop to a server function. The form data is automatically serialized and sent to the server.
+
+```ts
+// app/lib/contact.fn.ts
+import { createServerFn } from "catmint/server";
+
+export const submitContact = createServerFn(async (formData: FormData) => {
+  const name = formData.get("name") as string;
+  const email = formData.get("email") as string;
+  const message = formData.get("message") as string;
+
+  await db.contacts.create({ name, email, message });
+
+  return { success: true };
+});
+```
+
+```tsx
+// app/contact/page.tsx
+import { Form } from "catmint/form";
+import { submitContact } from "../lib/contact.fn";
+
+export default function ContactPage() {
+  return (
+    <div>
+      <h1>Contact Us</h1>
+      <Form action={submitContact}>
+        <label>
+          Name
+          <input name="name" type="text" required />
+        </label>
+        <label>
+          Email
+          <input name="email" type="email" required />
+        </label>
+        <label>
+          Message
+          <textarea name="message" required />
+        </label>
+        <button type="submit">Send</button>
+      </Form>
+    </div>
+  );
+}
+```
+
+## Progressive Enhancement
+
+The `<Form>` component works without client-side JavaScript. When JS is disabled, the form submits as a standard HTML form POST request. Catmint handles the server function invocation on the server, processes the action, and returns the page with any updated state.
+
+When JavaScript is available, the form submission is intercepted on the client. The data is sent via an RPC call to the server function, avoiding a full page reload and enabling optimistic UI updates.
+
+> Progressive enhancement means your forms always work, even if the JavaScript bundle has not loaded yet or fails to execute. This is especially important for critical flows like authentication and checkout.
+
+## CSRF Protection
+
+Catmint automatically injects a CSRF token into every `<Form>` as a hidden input field. The token is generated per session and validated on the server before the action executes. You do not need to handle CSRF tokens manually.
+
+```html
+<!-- Rendered HTML (simplified) -->
+<form method="POST" action="/__catmint/fn/submitContact">
+  <input type="hidden" name="_csrf" value="random-token-here" />
+  <input name="name" type="text" />
+  <input name="email" type="email" />
+  <button type="submit">Send</button>
+</form>
+```
+
+If the CSRF token is missing or invalid, the server rejects the request with a 403 status before the action function is called.
+
+## useFormAction Hook
+
+The `useFormAction()` hook from `catmint/hooks` tracks the state of a form action and provides loading, error, and success information.
+
+```tsx
+// app/contact/page.client.tsx
+import { Form } from "catmint/form";
+import { useFormAction } from "catmint/hooks";
+import { submitContact } from "../lib/contact.fn";
+
+export default function ContactPage() {
+  const { isSubmitting, error, data } = useFormAction(submitContact);
+
+  return (
+    <div>
+      <h1>Contact Us</h1>
+
+      {data?.success && (
+        <p>Thank you for your message. We will get back to you soon.</p>
+      )}
+
+      <Form action={submitContact}>
+        <label>
+          Name
+          <input name="name" type="text" required />
+        </label>
+        <label>
+          Email
+          <input name="email" type="email" required />
+        </label>
+        <label>
+          Message
+          <textarea name="message" required />
+        </label>
+
+        <button type="submit" disabled={isSubmitting}>
+          {isSubmitting ? "Sending..." : "Send"}
+        </button>
+
+        {error && <p>Error: {error.message}</p>}
+      </Form>
+    </div>
+  );
+}
+```
+
+The hook returns:
+
+| Property       | Type             | Description                                         |
+| -------------- | ---------------- | --------------------------------------------------- |
+| `isSubmitting` | `boolean`        | Whether the form is currently submitting            |
+| `error`        | `Error \| null`  | Error from the last failed submission               |
+| `data`         | `T \| undefined` | Return value from the server function after success |
+
+## File Uploads
+
+The `<Form>` component supports file uploads using multipart form data. When a form contains a file input, Catmint automatically sets the encoding to `multipart/form-data`.
+
+```ts
+// app/lib/upload.fn.ts
+import { createServerFn } from "catmint/server";
+
+export const uploadAvatar = createServerFn(async (formData: FormData) => {
+  const file = formData.get("avatar") as File;
+
+  if (!file || file.size === 0) {
+    return { error: "No file selected." };
+  }
+
+  if (file.size > 5 * 1024 * 1024) {
+    return { error: "File must be under 5 MB." };
+  }
+
+  const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
+  if (!allowedTypes.includes(file.type)) {
+    return { error: "Only JPEG, PNG, and WebP images are allowed." };
+  }
+
+  const buffer = await file.arrayBuffer();
+  const url = await storage.upload(file.name, buffer, file.type);
+
+  return { url };
+});
+```
+
+```tsx
+// app/settings/avatar/page.client.tsx
+import { Form } from "catmint/form";
+import { useFormAction } from "catmint/hooks";
+import { uploadAvatar } from "../../lib/upload.fn";
+
+export default function AvatarUploadPage() {
+  const { isSubmitting, error, data } = useFormAction(uploadAvatar);
+
+  return (
+    <div>
+      <h2>Upload Avatar</h2>
+
+      <Form action={uploadAvatar}>
+        <input type="file" name="avatar" accept="image/*" required />
+        <button type="submit" disabled={isSubmitting}>
+          {isSubmitting ? "Uploading..." : "Upload"}
+        </button>
+      </Form>
+
+      {error && <p>Error: {error.message}</p>}
+      {data?.error && <p>{data.error}</p>}
+      {data?.url && (
+        <div>
+          <p>Upload complete:</p>
+          <img src={data.url} alt="Avatar" width={128} height={128} />
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+## Multipart Form Data
+
+When your server function receives a `FormData` argument, all fields are available through the standard `FormData` API. Text fields return strings, and file fields return `File` objects.
+
+```ts
+export const createPost = createServerFn(async (formData: FormData) => {
+  const title = formData.get("title") as string;
+  const body = formData.get("body") as string;
+  const tags = formData.getAll("tags") as string[]; // Multiple values
+  const cover = formData.get("cover") as File | null; // Optional file
+
+  let coverUrl: string | null = null;
+  if (cover && cover.size > 0) {
+    coverUrl = await uploadFile(cover);
+  }
+
+  return await db.posts.create({ title, body, tags, coverUrl });
+});
+```
+
+## Validation
+
+Validate form data in your server function and return structured errors. A common pattern is to return field-level errors:
+
+```ts
+// app/lib/register.fn.ts
+import { createServerFn } from "catmint/server";
+
+export const register = createServerFn(async (formData: FormData) => {
+  const email = formData.get("email") as string;
+  const password = formData.get("password") as string;
+  const errors: Record<string, string> = {};
+
+  if (!email || !email.includes("@")) {
+    errors.email = "A valid email is required.";
+  }
+
+  if (!password || password.length < 8) {
+    errors.password = "Password must be at least 8 characters.";
+  }
+
+  if (Object.keys(errors).length > 0) {
+    return { success: false, errors };
+  }
+
+  const user = await createUser(email, password);
+  return { success: true, user };
+});
+```
+
+```tsx
+// app/register/page.client.tsx
+import { Form } from "catmint/form";
+import { useFormAction } from "catmint/hooks";
+import { register } from "../lib/register.fn";
+
+export default function RegisterPage() {
+  const { isSubmitting, data } = useFormAction(register);
+  const errors = data?.errors || {};
+
+  return (
+    <Form action={register}>
+      <div>
+        <input name="email" type="email" placeholder="Email" />
+        {errors.email && <p>{errors.email}</p>}
+      </div>
+      <div>
+        <input name="password" type="password" placeholder="Password" />
+        {errors.password && <p>{errors.password}</p>}
+      </div>
+      <button type="submit" disabled={isSubmitting}>
+        {isSubmitting ? "Creating account..." : "Register"}
+      </button>
+    </Form>
+  );
+}
+```
+
+## Redirecting After Submission
+
+To redirect after a successful form submission, return a redirect response from the server function:
+
+```ts
+import { createServerFn, redirect } from "catmint/server";
+
+export const createProject = createServerFn(async (formData: FormData) => {
+  const name = formData.get("name") as string;
+  const project = await db.projects.create({ name });
+
+  // Redirect to the new project page
+  return redirect(`/projects/${project.id}`);
+});
+```
+
+## Summary
+
+| Feature                 | Details                                                              |
+| ----------------------- | -------------------------------------------------------------------- |
+| `<Form>`                | Component from `catmint/form` with server function `action` prop     |
+| Progressive enhancement | Works without JS via standard form POST; enhanced with JS via RPC    |
+| CSRF protection         | Automatic token injection and server-side validation                 |
+| `useFormAction()`       | Hook for submission loading, error, and success state                |
+| File uploads            | Automatic multipart encoding with `File` objects in server functions |
+| Validation              | Return structured errors from server functions                       |
+
+[Next: Hooks →](/guides/hooks)

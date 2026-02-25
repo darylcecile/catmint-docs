@@ -1,0 +1,274 @@
+# Security
+
+Catmint includes several built-in security features to help protect your application
+against common web vulnerabilities. This guide covers Content Security Policy,
+CSRF protection, environment variable safety, CORS configuration, and header
+immutability.
+
+## Content Security Policy
+
+The `csp()` helper from `catmint/security` generates a
+Content-Security-Policy header with automatic nonce generation for inline scripts.
+
+```ts
+// app/middleware.ts
+import { defineMiddleware } from 'catmint/middleware'
+import { csp } from 'catmint/security'
+
+export const middleware = defineMiddleware(async (ctx) => {
+  const policy = csp({
+    'default-src': ["'self'"],
+    'script-src': ["'self'", "'nonce'"],
+    'style-src': ["'self'", "'unsafe-inline'"],
+    'img-src': ["'self'", 'data:', 'https:'],
+    'connect-src': ["'self'"],
+  })
+
+  const response = await ctx.next()
+  response.headers.set('Content-Security-Policy', policy.header)
+  return response
+})
+```
+
+### Automatic Nonce Generation
+
+When `'nonce'` is included in a
+directive, Catmint generates a cryptographically random nonce per request. The nonce
+is injected into inline `<script>` tags
+during SSR and added to the CSP header as `'nonce-<value>'`.
+
+```txt
+// The generated header looks like:
+// Content-Security-Policy: default-src 'self'; script-src 'self' 'nonce-a1b2c3d4e5'
+
+// Inline scripts rendered by Catmint automatically receive the nonce:
+// <script nonce="a1b2c3d4e5">/* hydration code */</script>
+```
+
+The `policy` object returned by `csp()` exposes the nonce
+value for use in custom inline scripts:
+
+```ts
+const policy = csp({
+  'script-src': ["'self'", "'nonce'"],
+})
+
+// policy.nonce contains the generated nonce string
+// policy.header contains the full CSP header value
+```
+
+## CSRF Protection
+
+Catmint automatically protects against Cross-Site Request Forgery attacks. When
+using the built-in `<Form>` component
+from `catmint/form`, a CSRF token
+is generated and injected as a hidden field in every form submission.
+
+```tsx
+import { Form } from 'catmint/form'
+
+export default function ContactPage() {
+  return (
+    <Form action="/api/contact" method="POST">
+      <input name="email" type="email" required />
+      <textarea name="message" required />
+      <button type="submit">Send</button>
+    </Form>
+  )
+}
+
+// Rendered HTML includes:
+// <form action="/api/contact" method="POST">
+//   <input type="hidden" name="_csrf" value="token-value" />
+//   ...
+// </form>
+```
+
+The server validates the CSRF token on every mutating request (POST, PUT, DELETE,
+PATCH). If the token is missing or invalid, the request is rejected with a `403 Forbidden` response.
+
+> CSRF protection is automatic for `<Form>` submissions.
+> If you build forms with plain `<form>` elements
+> or send requests via `fetch`, you must
+> include the token manually. Server functions called via RPC are exempt because
+> they use a separate authentication mechanism.
+
+## Environment Variable Safety
+
+Catmint enforces a strict boundary between server and client environment variables.
+Variables accessed through `env.private` are
+only available in server-side code. Attempting to reference `env.private` in a client
+component or any code that reaches the client bundle produces a build error.
+
+```ts
+// app/auth.fn.ts (server-only - safe)
+import { env } from 'catmint/env'
+
+const secret = env.private.JWT_SECRET  // OK: server function
+
+// app/components/Widget.client.tsx (client component - blocked)
+import { env } from 'catmint/env'
+
+const secret = env.private.JWT_SECRET  // BUILD ERROR: env.private
+                                        // cannot be accessed in
+                                        // client code
+```
+
+Public environment variables that need to reach the client should use `env.public`, which only exposes
+variables prefixed with `PUBLIC_` in
+your `.env` file:
+
+```bash
+# .env
+DATABASE_URL=postgresql://...       # Only available via env.private
+JWT_SECRET=super-secret             # Only available via env.private
+PUBLIC_API_URL=https://api.example  # Available via env.public
+```
+
+```ts
+// Safe in client components
+import { env } from 'catmint/env'
+
+const apiUrl = env.public.PUBLIC_API_URL  // OK
+```
+
+## CORS Configuration
+
+Cross-Origin Resource Sharing can be configured per-endpoint using an `OPTIONS` handler,
+or globally using middleware.
+
+### Per-Endpoint CORS
+
+Export an `OPTIONS` handler
+from your endpoint file to respond to CORS preflight requests:
+
+```ts
+// app/api/data/endpoint.ts
+export function OPTIONS() {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      'Access-Control-Allow-Origin': 'https://example.com',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Max-Age': '86400',
+    },
+  })
+}
+
+export async function GET({ request }: { request: Request }) {
+  const data = { message: 'Hello' }
+  return new Response(JSON.stringify(data), {
+    headers: {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': 'https://example.com',
+    },
+  })
+}
+```
+
+### Global CORS via Middleware
+
+For APIs that need CORS on all endpoints, apply it in middleware:
+
+```ts
+// app/api/middleware.ts
+import { defineMiddleware } from 'catmint/middleware'
+
+const ALLOWED_ORIGINS = [
+  'https://example.com',
+  'https://app.example.com',
+]
+
+export const middleware = defineMiddleware(async (ctx) => {
+  const origin = ctx.request.headers.get('Origin')
+
+  if (ctx.request.method === 'OPTIONS') {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        'Access-Control-Allow-Origin': ALLOWED_ORIGINS.includes(origin ?? '')
+          ? origin!
+          : '',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        'Access-Control-Max-Age': '86400',
+      },
+    })
+  }
+
+  const response = await ctx.next()
+
+  if (origin && ALLOWED_ORIGINS.includes(origin)) {
+    response.headers.set('Access-Control-Allow-Origin', origin)
+  }
+
+  return response
+})
+```
+
+## ReadonlyHeaders
+
+Request headers in Catmint are exposed as `ReadonlyHeaders`, an
+immutable view of the incoming headers. This prevents accidental mutation of
+request state, which could lead to subtle bugs in middleware chains.
+
+```ts
+import { headers } from 'catmint/headers'
+
+export async function GET() {
+  const h = headers()
+
+  h.get('Authorization')  // OK: reading is allowed
+  h.has('Content-Type')   // OK: checking existence is allowed
+  h.entries()             // OK: iterating is allowed
+
+  h.set('X-Custom', 'v') // TypeError: headers are read-only
+  h.delete('Cookie')     // TypeError: headers are read-only
+}
+```
+
+Response headers are mutable. Use the `Response` constructor
+or middleware context to set outgoing headers.
+
+## Security Headers Checklist
+
+Recommended security headers to set via middleware in production:
+
+```ts
+// app/middleware.ts
+import { defineMiddleware } from 'catmint/middleware'
+import { csp } from 'catmint/security'
+
+export const middleware = defineMiddleware(async (ctx) => {
+  const policy = csp({
+    'default-src': ["'self'"],
+    'script-src': ["'self'", "'nonce'"],
+    'style-src': ["'self'", "'unsafe-inline'"],
+  })
+
+  const response = await ctx.next()
+
+  response.headers.set('Content-Security-Policy', policy.header)
+  response.headers.set('X-Content-Type-Options', 'nosniff')
+  response.headers.set('X-Frame-Options', 'DENY')
+  response.headers.set('X-XSS-Protection', '0')
+  response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
+  response.headers.set('Permissions-Policy', 'camera=(), microphone=()')
+  response.headers.set(
+    'Strict-Transport-Security',
+    'max-age=63072000; includeSubDomains; preload'
+  )
+
+  return response
+})
+```
+
+| Header | Purpose |
+| --- | --- |
+| `Content-Security-Policy` | Controls which resources the browser is allowed to load |
+| `X-Content-Type-Options` | Prevents MIME type sniffing |
+| `X-Frame-Options` | Prevents clickjacking via iframe embedding |
+| `Strict-Transport-Security` | Enforces HTTPS connections |
+| `Referrer-Policy` | Controls referrer information sent with requests |
+| `Permissions-Policy` | Restricts browser features (camera, microphone, etc.) |

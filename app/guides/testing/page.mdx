@@ -1,0 +1,287 @@
+# Testing
+
+Catmint ships a dedicated testing module at `catmint/testing` that provides utilities for rendering pages, mocking server functions, and testing endpoints and middleware in isolation. Catmint uses [Vitest](https://vitest.dev) as its test runner.
+
+## Setup
+
+Install Vitest as a dev dependency and add a test script to your `package.json`:
+
+```sh
+pnpm add -D vitest
+```
+
+```json
+// package.json
+{
+  "scripts": {
+    "test": "vitest",
+    "test:run": "vitest run"
+  }
+}
+```
+
+Catmint automatically configures Vitest with the correct transforms and environment when the `catmint-vite` plugin is present. No additional Vitest config is required in most cases.
+
+## Testing Utilities
+
+All test helpers are imported from `catmint/testing`:
+
+### renderPage(url, options?)
+
+Renders a page component by its URL in an isolated test environment. It resolves the matching route, runs middleware, and returns the rendered output. This is the primary utility for testing page components with their full routing context.
+
+```ts
+import { renderPage } from 'catmint/testing'
+
+const result = await renderPage('/blog/hello-world')
+
+// result.container - the rendered DOM container
+// result.html      - the serialized HTML string
+// result.status    - the HTTP status code
+// result.headers   - response headers
+```
+
+The optional second argument accepts configuration for the test environment:
+
+| Option | Type | Description |
+| --- | --- | --- |
+| `headers` | `Record<string, string>` | Request headers to include |
+| `cookies` | `Record<string, string>` | Cookies to set on the request |
+| `search` | `Record<string, string>` | Query string parameters |
+
+### mockServerFn(fn, impl)
+
+Replaces a server function with a mock implementation for the duration of a test. This is useful for isolating page tests from their data dependencies.
+
+```ts
+import { mockServerFn } from 'catmint/testing'
+import { getPost } from '../app/blog/posts.fn'
+
+mockServerFn(getPost, async (slug: string) => {
+  return {
+    title: 'Test Post',
+    slug,
+    content: 'Mock content for testing.',
+  }
+})
+```
+
+The mock is automatically cleaned up after each test when using Vitest's default lifecycle hooks.
+
+### createTestRequest(method, url, options?)
+
+Builds a standard `Request` object for testing API endpoints. It handles URL construction, headers, body serialization, and content type negotiation.
+
+```ts
+import { createTestRequest } from 'catmint/testing'
+
+// Simple GET request
+const getReq = createTestRequest('GET', '/api/users')
+
+// POST request with JSON body
+const postReq = createTestRequest('POST', '/api/users', {
+  body: { name: 'Alice', email: 'alice@example.com' },
+  headers: { 'Authorization': 'Bearer test-token' },
+})
+```
+
+### createTestContext(options?)
+
+Builds a context object for testing middleware in isolation. The context includes a request, mutable response headers, and the `next()` function that middleware must call to proceed.
+
+```ts
+import { createTestContext } from 'catmint/testing'
+
+const ctx = createTestContext({
+  url: '/dashboard',
+  method: 'GET',
+  headers: { 'Cookie': 'session=abc123' },
+})
+
+// ctx.request  - the Request object
+// ctx.next     - a function to call the next middleware
+// ctx.response - mutable response properties
+```
+
+## Testing Pages
+
+Use `renderPage` to test page components with the full routing pipeline. Server functions called by the page can be mocked to return controlled data.
+
+```ts
+// app/blog/[slug]/__tests__/page.test.ts
+import { describe, it, expect } from 'vitest'
+import { renderPage, mockServerFn } from 'catmint/testing'
+import { getPost } from '../../posts.fn'
+
+describe('BlogPostPage', () => {
+  it('renders the post title', async () => {
+    mockServerFn(getPost, async (slug: string) => ({
+      title: 'Hello World',
+      slug,
+      content: 'This is a test post.',
+    }))
+
+    const { container } = await renderPage('/blog/hello-world')
+    expect(container.textContent).toContain('Hello World')
+  })
+
+  it('returns 404 for missing posts', async () => {
+    mockServerFn(getPost, async () => null)
+
+    const { status } = await renderPage('/blog/nonexistent')
+    expect(status).toBe(404)
+  })
+
+  it('renders with query parameters', async () => {
+    mockServerFn(getPost, async (slug: string) => ({
+      title: 'Draft Post',
+      slug,
+      content: 'Draft content.',
+    }))
+
+    const { container } = await renderPage('/blog/draft-post', {
+      search: { preview: 'true' },
+    })
+    expect(container.textContent).toContain('Draft Post')
+  })
+})
+```
+
+## Testing Endpoints
+
+Import your endpoint handler directly and pass it a `Request` built with `createTestRequest`. Endpoint handlers return standard `Response` objects.
+
+```ts
+// app/api/users/__tests__/endpoint.test.ts
+import { describe, it, expect } from 'vitest'
+import { createTestRequest } from 'catmint/testing'
+import { GET, POST } from '../endpoint'
+
+describe('Users Endpoint', () => {
+  it('GET returns a list of users', async () => {
+    const request = createTestRequest('GET', '/api/users')
+    const response = await GET({ request })
+    const data = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(data.users).toBeInstanceOf(Array)
+  })
+
+  it('POST creates a new user', async () => {
+    const request = createTestRequest('POST', '/api/users', {
+      body: { name: 'Bob', email: 'bob@example.com' },
+    })
+    const response = await POST({ request })
+    const data = await response.json()
+
+    expect(response.status).toBe(201)
+    expect(data.user.name).toBe('Bob')
+  })
+
+  it('POST returns 400 for invalid input', async () => {
+    const request = createTestRequest('POST', '/api/users', {
+      body: { name: '' },
+    })
+    const response = await POST({ request })
+
+    expect(response.status).toBe(400)
+  })
+})
+```
+
+## Testing Server Functions
+
+Server functions defined in `*.fn.ts` files can be imported and called directly in tests. They execute as regular async functions in the test environment without the RPC layer.
+
+```ts
+// app/blog/__tests__/posts.fn.test.ts
+import { describe, it, expect } from 'vitest'
+import { getPost, listPosts, createPost } from '../posts.fn'
+
+describe('Post Server Functions', () => {
+  it('listPosts returns published posts', async () => {
+    const posts = await listPosts()
+    expect(posts).toBeInstanceOf(Array)
+    expect(posts.every((p) => p.published)).toBe(true)
+  })
+
+  it('getPost returns a post by slug', async () => {
+    const post = await getPost('hello-world')
+    expect(post).toBeDefined()
+    expect(post?.slug).toBe('hello-world')
+  })
+
+  it('createPost validates required fields', async () => {
+    await expect(
+      createPost({ title: '', content: '' })
+    ).rejects.toThrow('Title is required')
+  })
+})
+```
+
+## Testing Middleware
+
+Use `createTestContext` to test middleware functions. The context provides a controllable `next()` function that simulates downstream middleware and page rendering.
+
+```ts
+// app/__tests__/middleware.test.ts
+import { describe, it, expect } from 'vitest'
+import { createTestContext } from 'catmint/testing'
+import { middleware } from '../middleware'
+
+describe('Root Middleware', () => {
+  it('allows authenticated requests', async () => {
+    const ctx = createTestContext({
+      url: '/dashboard',
+      headers: { 'Cookie': 'session=valid-token' },
+    })
+
+    const response = await middleware(ctx)
+    expect(response.status).not.toBe(401)
+  })
+
+  it('redirects unauthenticated requests to login', async () => {
+    const ctx = createTestContext({
+      url: '/dashboard',
+    })
+
+    const response = await middleware(ctx)
+    expect(response.status).toBe(302)
+    expect(response.headers.get('Location')).toBe('/login')
+  })
+
+  it('adds security headers', async () => {
+    const ctx = createTestContext({
+      url: '/',
+      headers: { 'Cookie': 'session=valid-token' },
+    })
+
+    const response = await middleware(ctx)
+    expect(response.headers.get('X-Frame-Options')).toBe('DENY')
+  })
+})
+```
+
+## Best Practices
+
+- Place test files in a `__tests__` directory next to the code they test, or use the `.test.ts` suffix.
+- Use `mockServerFn` to isolate page tests from database and network dependencies.
+- Test endpoints by importing handlers directly rather than making HTTP requests. This avoids needing to start a server.
+- Test middleware with `createTestContext` to verify both the happy path (calling `next()`) and early returns (redirects, error responses).
+- Keep server function tests focused on business logic. Database interactions can be mocked at the data access layer.
+
+## Running Tests
+
+```sh
+# Run all tests
+pnpm test
+
+# Run tests once (CI mode)
+pnpm test:run
+
+# Run a specific test file
+pnpm test app/blog/__tests__/posts.fn.test.ts
+
+# Run tests matching a pattern
+pnpm test --grep "BlogPostPage"
+```

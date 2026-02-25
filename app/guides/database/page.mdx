@@ -1,0 +1,309 @@
+# Database
+
+Catmint is database-agnostic. It does not ship a built-in ORM or database driver.
+Instead, you use server functions and server-only modules to access your database
+with any library you prefer -- Prisma, Drizzle, Knex, the `pg` driver, or anything
+else. This guide covers common patterns for connecting, querying, and managing
+your database within a Catmint application.
+
+## Database Access via Server Functions
+
+All database access must happen on the server. Use server functions (
+`*.fn.ts` files) or
+server-only modules (`*.server.ts` files)
+to keep database code out of the client bundle.
+
+```ts
+// app/db.server.ts
+import { Pool } from 'pg'
+import { env } from 'catmint/env'
+
+export const pool = new Pool({
+  connectionString: env.private.DATABASE_URL,
+  max: 20,
+})
+```
+
+```ts
+// app/posts/queries.fn.ts
+import { createServerFn } from 'catmint/server'
+import { pool } from '../db.server'
+
+export const listPosts = createServerFn(async () => {
+  const result = await pool.query(
+    'SELECT id, title, slug, published_at FROM posts WHERE published = true ORDER BY published_at DESC'
+  )
+  return result.rows
+})
+
+export const getPost = createServerFn(async (slug: string) => {
+  const result = await pool.query(
+    'SELECT * FROM posts WHERE slug = $1 AND published = true',
+    [slug]
+  )
+  return result.rows[0] ?? null
+})
+```
+
+> The `.server.ts` suffix guarantees
+> the module is excluded from the client bundle. Importing a `.server.ts` file in client
+> code produces a build error.
+
+## Connection Pooling
+
+Define your database connection at the module level in a `.server.ts` file. Module-level
+variables persist across requests in the same server process, which means
+connection pools are reused automatically.
+
+```ts
+// app/db.server.ts -- Prisma example
+import { PrismaClient } from '@prisma/client'
+
+export const prisma = new PrismaClient()
+
+// The PrismaClient instance is created once and reused
+// across all requests in the server process.
+```
+
+```ts
+// app/db.server.ts -- Drizzle example
+import { drizzle } from 'drizzle-orm/node-postgres'
+import { Pool } from 'pg'
+import { env } from 'catmint/env'
+import * as schema from './schema'
+
+const pool = new Pool({
+  connectionString: env.private.DATABASE_URL,
+  max: 20,
+  idleTimeoutMillis: 30000,
+})
+
+export const db = drizzle(pool, { schema })
+```
+
+Avoid creating new connections inside server functions or request handlers.
+Always import a shared client from a `.server.ts` module.
+
+## Type-Safe Queries
+
+Both Prisma and Drizzle provide type-safe query APIs. Combined with TypeScript
+and server functions, you get end-to-end type safety from the database to
+the component.
+
+### Prisma
+
+```ts
+// app/users/queries.fn.ts
+import { createServerFn } from 'catmint/server'
+import { prisma } from '../db.server'
+
+export const getUser = createServerFn(async (id: string) => {
+  // Return type is inferred from the Prisma schema
+  return prisma.user.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      posts: {
+        select: { id: true, title: true },
+        where: { published: true },
+      },
+    },
+  })
+})
+```
+
+### Drizzle
+
+```ts
+// app/users/queries.fn.ts
+import { createServerFn } from 'catmint/server'
+import { db } from '../db.server'
+import { users, posts } from '../schema'
+import { eq } from 'drizzle-orm'
+
+export const getUser = createServerFn(async (id: string) => {
+  const result = await db.query.users.findFirst({
+    where: eq(users.id, id),
+    with: {
+      posts: {
+        where: eq(posts.published, true),
+        columns: { id: true, title: true },
+      },
+    },
+  })
+  return result ?? null
+})
+```
+
+## Transaction Patterns
+
+Wrap related database operations in a transaction to ensure atomicity. Combine
+with `trace()` from `catmint/telemetry` to get
+observability into transaction timing and failures.
+
+```ts
+// app/orders/actions.fn.ts
+import { createServerFn } from 'catmint/server'
+import { trace } from 'catmint/telemetry'
+import { prisma } from '../db.server'
+
+export const createOrder = createServerFn(
+  async (input: { userId: string; items: OrderItem[] }) => {
+    return trace('db.transaction.createOrder', async (span) => {
+      span.setAttribute('user.id', input.userId)
+      span.setAttribute('items.count', input.items.length)
+
+      const order = await prisma.$transaction(async (tx) => {
+        // Verify stock for all items
+        for (const item of input.items) {
+          const product = await tx.product.findUnique({
+            where: { id: item.productId },
+          })
+
+          if (!product || product.stock < item.quantity) {
+            throw new Error(`Insufficient stock for ${item.productId}`)
+          }
+        }
+
+        // Create the order
+        const created = await tx.order.create({
+          data: {
+            userId: input.userId,
+            items: { create: input.items },
+            total: input.items.reduce(
+              (sum, i) => sum + i.price * i.quantity, 0
+            ),
+          },
+        })
+
+        // Decrement stock
+        for (const item of input.items) {
+          await tx.product.update({
+            where: { id: item.productId },
+            data: { stock: { decrement: item.quantity } },
+          })
+        }
+
+        return created
+      })
+
+      span.setAttribute('order.id', order.id)
+      return order
+    })
+  }
+)
+```
+
+## Migration Patterns
+
+Use the migration system provided by your database library. Catmint does not
+interfere with migration tooling.
+
+### Prisma Migrations
+
+```bash
+# Generate a migration from schema changes
+pnpm prisma migrate dev --name add_posts_table
+
+# Apply migrations in production
+pnpm prisma migrate deploy
+
+# Generate the Prisma client after schema changes
+pnpm prisma generate
+```
+
+### Drizzle Migrations
+
+```bash
+# Generate a migration
+pnpm drizzle-kit generate
+
+# Apply migrations
+pnpm drizzle-kit migrate
+```
+
+Add migration commands to your `package.json` scripts
+for convenience:
+
+```json
+{
+  "scripts": {
+    "db:migrate": "prisma migrate deploy",
+    "db:generate": "prisma generate",
+    "db:studio": "prisma studio"
+  }
+}
+```
+
+## Using in Endpoints
+
+Endpoint handlers can import the database client directly since they run
+exclusively on the server:
+
+```ts
+// app/api/posts/endpoint.ts
+import { prisma } from '../../db.server'
+
+export async function GET() {
+  const posts = await prisma.post.findMany({
+    where: { published: true },
+    orderBy: { publishedAt: 'desc' },
+  })
+
+  return new Response(JSON.stringify(posts), {
+    headers: { 'Content-Type': 'application/json' },
+  })
+}
+
+export async function POST({ request }: { request: Request }) {
+  const body = await request.json()
+
+  const post = await prisma.post.create({
+    data: {
+      title: body.title,
+      content: body.content,
+      slug: body.slug,
+      published: false,
+    },
+  })
+
+  return new Response(JSON.stringify(post), {
+    status: 201,
+    headers: { 'Content-Type': 'application/json' },
+  })
+}
+```
+
+## Environment Configuration
+
+Store your database connection string in `.env` and
+access it through `env.private` to
+ensure it never appears in the client bundle:
+
+```bash
+# .env
+DATABASE_URL=postgresql://user:password@localhost:5432/mydb
+
+# .env.production
+DATABASE_URL=postgresql://user:password@prod-host:5432/mydb
+```
+
+```ts
+// app/db.server.ts
+import { env } from 'catmint/env'
+
+// env.private.DATABASE_URL is only accessible in server code
+const connectionString = env.private.DATABASE_URL
+```
+
+## Recommended Libraries
+
+| Library | Type | Best For |
+| --- | --- | --- |
+| [Prisma](https://www.prisma.io) | ORM | Schema-first workflow, migrations, type generation |
+| [Drizzle](https://orm.drizzle.team) | ORM | SQL-like API, lightweight, edge-compatible |
+| [Knex](https://knexjs.org) | Query Builder | Flexible SQL building without full ORM |
+| `pg` | Driver | Direct PostgreSQL access with raw SQL |
+| `better-sqlite3` | Driver | Embedded SQLite for simple applications |

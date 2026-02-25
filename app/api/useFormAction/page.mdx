@@ -1,0 +1,102 @@
+# useFormAction
+
+Wraps a server function for form-specific usage. Handles both `FormData` and plain object inputs, tracks submission state, and provides the raw `FormData` for optimistic UI updates.
+
+## Import
+
+```ts
+import { useFormAction } from "catmint/hooks";
+```
+
+## Signature
+
+```ts
+function useFormAction<TInput, TOutput>(
+  fn: (input: TInput) => Promise<TOutput>,
+): FormActionState<TInput, TOutput>;
+```
+
+```ts
+interface FormActionState<TInput, TOutput> {
+  submit: (data: FormData | TInput) => Promise<TOutput>;
+  data: TOutput | undefined;
+  error: Error | undefined;
+  pending: boolean;
+  formData: FormData | undefined;
+  reset: () => void;
+}
+```
+
+## Parameters
+
+| Parameter | Type                                  | Required | Description                                                                                                                                                  |
+| --------- | ------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `fn`      | `(input: TInput) => Promise<TOutput>` | Yes      | A server function to handle the form submission. When `FormData` is passed to `submit`, it is automatically converted to a plain object before calling `fn`. |
+
+## Return Value
+
+| Property   | Type                                             | Description                                                                                                                     |
+| ---------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| `submit`   | `(data: FormData \| TInput) => Promise<TOutput>` | Submit the form. Accepts either a `FormData` object (from a form event) or a plain object matching `TInput`.                    |
+| `data`     | `TOutput \| undefined`                           | The most recent successful result.                                                                                              |
+| `error`    | `Error \| undefined`                             | The most recent error, cleared on the next submission.                                                                          |
+| `pending`  | `boolean`                                        | `true` while the submission is in flight.                                                                                       |
+| `formData` | `FormData \| undefined`                          | The raw `FormData` from the most recent submission (only set when `FormData` was passed to `submit`). Useful for optimistic UI. |
+| `reset`    | `() => void`                                     | Resets all state (`data`, `error`, `pending`, `formData`) to initial values.                                                    |
+
+## Examples
+
+### Basic form submission
+
+```tsx
+// ContactForm.client.tsx
+import { useFormAction } from "catmint/hooks";
+import { submitContactForm } from "./actions";
+
+function ContactForm() {
+  const { submit, pending, error, data } = useFormAction(submitContactForm);
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    await submit(new FormData(e.currentTarget));
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <input name="email" type="email" required />
+      <textarea name="message" required />
+      <button disabled={pending}>{pending ? "Sending..." : "Send"}</button>
+      {error && <p className="error">{error.message}</p>}
+      {data && <p className="success">Message sent!</p>}
+    </form>
+  );
+}
+```
+
+### With plain object input
+
+```tsx
+const { submit } = useFormAction(createUser);
+
+// You can also pass a plain object instead of FormData
+await submit({ name: "Alice", email: "alice@example.com" });
+```
+
+### Optimistic UI with formData
+
+```tsx
+const { submit, pending, formData } = useFormAction(addComment);
+
+// Show the pending comment optimistically
+{
+  pending && formData && (
+    <div className="comment pending">{formData.get("body") as string}</div>
+  );
+}
+```
+
+## See Also
+
+- [useServerFn](/api/useServerFn)
+- [createServerFn](/api/createServerFn)
+- [Form](/api/Form)

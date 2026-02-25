@@ -1,0 +1,104 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+@theme {
+  --color-brand-50: #f3f0ff;
+  --color-brand-100: #e9e3ff;
+  --color-brand-500: #6c5ce7;
+  --color-brand-600: #5a4bd1;
+  --color-brand-700: #4839b5;
+
+  --font-mono: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+}
+
+@layer base {
+  body {
+    @apply font-sans text-gray-900 bg-gray-50 leading-relaxed;
+  }
+}
+
+@layer components {
+  /* Code block styling */
+  .prose pre {
+    @apply rounded-lg shadow-sm border border-gray-800 overflow-x-auto;
+  }
+
+  .prose pre code {
+    @apply text-sm leading-relaxed;
+  }
+
+  /* Shiki applies inline styles for syntax colors; ensure the code element
+     inherits font-size and doesn't add its own background/padding. */
+  .prose pre code .line {
+    display: inline;
+  }
+
+  /* Inline code in headings should not look like code blocks */
+  .prose h1 code,
+  .prose h2 code,
+  .prose h3 code,
+  .prose h4 code {
+    @apply text-inherit font-semibold bg-transparent p-0;
+  }
+
+  /* Table styling */
+  .prose table {
+    @apply text-sm;
+  }
+
+  .prose thead th {
+    @apply bg-gray-100 font-semibold;
+  }
+
+  .prose tbody tr {
+    @apply border-gray-200;
+  }
+
+  /* Blockquote styling for callouts */
+  .prose blockquote {
+    @apply bg-brand-50 border-brand-500 text-gray-700 rounded-r-lg py-1;
+  }
+}
+
+/*
+ * Typography plugin overrides — these use custom properties rather than
+ * @theme because they target the plugin's generated prose classes.
+ */
+.prose {
+  --tw-prose-body: inherit;
+  --tw-prose-pre-bg: transparent;
+  max-width: none;
+}
+
+.prose code:not(pre code) {
+  background-color: #f3f4f6;
+  padding: 0.125rem 0.25rem;
+  border-radius: 0.25rem;
+  font-weight: 400;
+}
+
+.prose code::before,
+.prose code::after {
+  content: "";
+}
+
+.prose pre code {
+  background-color: transparent;
+  padding: 0;
+}
+
+.prose a {
+  color: #6c5ce7;
+  text-decoration: none;
+}
+
+.prose a:hover {
+  text-decoration: underline;
+}
+
+.prose h1,
+.prose h2,
+.prose h3,
+.prose h4 {
+  scroll-margin-top: 4rem;
+}

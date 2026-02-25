@@ -1,0 +1,291 @@
+# Deployment
+
+Catmint uses an adapter system to deploy your application to different platforms.
+Adapters transform the build output into the format required by your target
+environment. This guide covers the built-in adapters, the build workflow, and
+static deployment for frontend-only applications.
+
+## Build Workflow
+
+The deployment process has two steps: build and start.
+
+```bash
+# Build the application
+pnpm catmint build
+
+# Start the production server
+pnpm catmint start
+```
+
+`catmint build` compiles
+your application using Vite, producing optimized server and client bundles.
+The adapter then transforms these bundles into the platform-specific format. `catmint start` runs the
+built application using the configured adapter.
+
+## Adapter System
+
+Adapters are configured in `catmint.config.ts` via
+the `adapter` property. Each
+adapter is a function that returns an object implementing the `CatmintAdapter` interface.
+
+```ts
+// CatmintAdapter interface
+interface CatmintAdapter {
+  name: string
+  buildEnd?(options: {
+    outputDir: string
+    clientDir: string
+    serverDir: string
+  }): Promise<void>
+  startServer?(options: {
+    outputDir: string
+    port: number
+  }): Promise<void>
+}
+```
+
+The `buildEnd` hook runs
+after the Vite build completes and transforms the output. The `startServer` hook is
+called by `catmint start` to
+run the production server.
+
+## Node.js Adapter
+
+The `@catmint/adapter-node` package
+builds your application as a standalone Node.js server. This is the most
+flexible adapter and works anywhere Node.js runs.
+
+```bash
+pnpm add -D @catmint/adapter-node
+```
+
+```ts
+// catmint.config.ts
+import { defineConfig } from 'catmint/config'
+import node from '@catmint/adapter-node'
+
+export default defineConfig({
+  mode: 'fullstack',
+  adapter: node({
+    port: 3000,
+    host: '0.0.0.0',
+  }),
+})
+```
+
+### Configuration Options
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `port` | `3000` | Port the server listens on. Can be overridden by the `PORT` env var. |
+| `host` | `'0.0.0.0'` | Host the server binds to |
+
+### Docker Deployment
+
+The Node.js adapter works well with Docker. Here is a multi-stage Dockerfile
+that builds and serves the application:
+
+```dockerfile
+# Dockerfile
+FROM node:20-alpine AS base
+RUN corepack enable
+
+# Install dependencies
+FROM base AS deps
+WORKDIR /app
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+
+# Build the application
+FROM base AS build
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+RUN pnpm catmint build
+
+# Production image
+FROM base AS production
+WORKDIR /app
+ENV NODE_ENV=production
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=build /app/dist ./dist
+COPY package.json ./
+
+EXPOSE 3000
+CMD ["pnpm", "catmint", "start"]
+```
+
+```bash
+# Build and run
+docker build -t my-catmint-app .
+docker run -p 3000:3000 my-catmint-app
+```
+
+## Vercel Adapter
+
+The `@catmint/adapter-vercel` package
+transforms the build output into Vercel's Build Output API v3 format for
+seamless deployment on the Vercel platform.
+
+```bash
+pnpm add -D @catmint/adapter-vercel
+```
+
+```ts
+// catmint.config.ts
+import { defineConfig } from 'catmint/config'
+import vercel from '@catmint/adapter-vercel'
+
+export default defineConfig({
+  mode: 'fullstack',
+  adapter: vercel(),
+})
+```
+
+### Configuration Options
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `runtime` | `'nodejs20.x'` | Vercel serverless function runtime |
+| `regions` | `['iad1']` | Deployment regions for serverless functions |
+| `split` | `false` | Split routes into individual serverless functions |
+
+Deploy by connecting your Git repository to Vercel or using the CLI:
+
+```bash
+# Deploy with Vercel CLI
+pnpm catmint build
+npx vercel deploy --prebuilt
+```
+
+## Cloudflare Adapter
+
+The `@catmint/adapter-cloudflare` package
+builds your application for Cloudflare Workers, enabling edge deployment with
+low latency worldwide.
+
+```bash
+pnpm add -D @catmint/adapter-cloudflare
+```
+
+```ts
+// catmint.config.ts
+import { defineConfig } from 'catmint/config'
+import cloudflare from '@catmint/adapter-cloudflare'
+
+export default defineConfig({
+  mode: 'fullstack',
+  adapter: cloudflare(),
+})
+```
+
+### Configuration Options
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `routes` | `auto` | Route configuration for the Workers router |
+| `compatibilityDate` | Build date | Cloudflare Workers compatibility date |
+
+Deploy with Wrangler:
+
+```bash
+pnpm catmint build
+npx wrangler deploy
+```
+
+> The Cloudflare Workers runtime has limitations compared to Node.js. Some
+> Node.js APIs are not available. Ensure your database driver and dependencies
+> are edge-compatible.
+
+## Static Deployment (Frontend Mode)
+
+Applications using `mode: 'frontend'` produce
+a static site with no server component. No adapter is needed. The build output
+is a directory of HTML, CSS, and JavaScript files that can be deployed to any
+static hosting provider.
+
+```ts
+// catmint.config.ts
+import { defineConfig } from 'catmint/config'
+
+export default defineConfig({
+  mode: 'frontend',
+  // No adapter needed for static sites
+})
+```
+
+```bash
+pnpm catmint build
+# Output is in dist/ -- deploy this directory
+```
+
+Static output can be deployed to:
+
+- Cloudflare Pages
+- Netlify
+- Vercel (static mode)
+- GitHub Pages
+- AWS S3 + CloudFront
+- Any web server or CDN
+
+## Environment Variables
+
+Environment variables are handled differently depending on the platform:
+
+| Platform | Configuration |
+| --- | --- |
+| Node.js | `.env` files or system environment variables |
+| Vercel | Vercel dashboard or `vercel env` CLI |
+| Cloudflare | `wrangler.toml` or Cloudflare dashboard |
+| Docker | `docker run -e` flags or Docker Compose |
+
+> Remember that `env.private` variables
+> are only available on the server. Only variables accessed via `env.public` (prefixed
+> with `PUBLIC_`) are
+> embedded in the client bundle at build time.
+
+## Adapter Comparison
+
+| Adapter | Package | Runtime | Use Case |
+| --- | --- | --- | --- |
+| Node.js | `@catmint/adapter-node` | Node.js | Self-hosted, Docker, VMs, any Node.js environment |
+| Vercel | `@catmint/adapter-vercel` | Serverless | Vercel platform with automatic scaling |
+| Cloudflare | `@catmint/adapter-cloudflare` | Edge | Global edge deployment with low latency |
+| None (static) | -- | None | Frontend-only apps, static hosting |
+
+## Writing a Custom Adapter
+
+You can create a custom adapter by implementing the `CatmintAdapter` interface.
+This is useful for deploying to platforms not covered by the built-in adapters.
+
+```ts
+// my-adapter.ts
+import type { CatmintAdapter } from 'catmint/adapter'
+
+export default function myAdapter(): CatmintAdapter {
+  return {
+    name: 'my-adapter',
+    async buildEnd({ outputDir, clientDir, serverDir }) {
+      // Transform the build output for your platform
+      // - outputDir: the root build output directory
+      // - clientDir: static client assets
+      // - serverDir: server bundle
+    },
+    async startServer({ outputDir, port }) {
+      // Start the production server
+    },
+  }
+}
+```
+
+```ts
+// catmint.config.ts
+import { defineConfig } from 'catmint/config'
+import myAdapter from './my-adapter'
+
+export default defineConfig({
+  mode: 'fullstack',
+  adapter: myAdapter(),
+})
+```

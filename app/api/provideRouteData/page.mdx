@@ -1,0 +1,73 @@
+# provideRouteData
+
+Provide data from a server component to client components within the current route's subtree. The data is stored in the request-scoped AsyncLocalStorage context and can be read by client components using `useRouteData()` from `catmint/hooks`.
+
+## Import
+
+```ts
+import { provideRouteData } from 'catmint/hooks'
+```
+
+`provideRouteData` is also available from `catmint/server`:
+
+```ts
+import { provideRouteData } from 'catmint/server'
+```
+
+## Signature
+
+```ts
+function provideRouteData<T>(data: T): void
+```
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `data` | `T` | Yes | The data to provide to client components in this route's subtree |
+
+## Return Value
+
+`void`
+
+## Errors
+
+Throws if called outside of a server request context. Must be called within a server component render function, a loader, middleware, or an API route handler.
+
+## Examples
+
+```tsx
+// Server component (page.tsx)
+import { provideRouteData } from 'catmint/server'
+
+export default async function DashboardPage() {
+  const stats = await fetchDashboardStats()
+  provideRouteData(stats)
+  return <Dashboard />
+}
+```
+
+```tsx
+// Client component (Dashboard.client.tsx)
+import { useRouteData } from 'catmint/hooks'
+
+interface DashboardStats {
+  totalUsers: number
+  activeUsers: number
+}
+
+function Dashboard() {
+  const stats = useRouteData<DashboardStats>()
+  return (
+    <div>
+      <p>Total users: {stats.totalUsers}</p>
+      <p>Active users: {stats.activeUsers}</p>
+    </div>
+  )
+}
+```
+
+## See Also
+
+- [useRouteData](/api/useRouteData)
+- [useParams](/api/useParams)

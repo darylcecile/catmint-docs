@@ -1,0 +1,236 @@
+# Internationalization (i18n)
+
+Catmint provides built-in internationalization support with locale-aware routing, automatic language detection, and helpers for both server and client components.
+
+## Configuration
+
+Enable i18n by adding the `i18n` property to your `catmint.config.ts`:
+
+```ts
+// catmint.config.ts
+import { defineConfig } from "catmint/config";
+
+export default defineConfig({
+  mode: "fullstack",
+  i18n: {
+    locales: ["en", "fr", "de", "ja"],
+    defaultLocale: "en",
+    strategy: "prefix-except-default",
+  },
+});
+```
+
+### Configuration Options
+
+| Option          | Type       | Description                                               |
+| --------------- | ---------- | --------------------------------------------------------- |
+| `locales`       | `string[]` | List of supported locale codes (e.g., `['en', 'fr']`)     |
+| `defaultLocale` | `string`   | The fallback locale when no match is found                |
+| `strategy`      | `string`   | Routing strategy: `'prefix'` or `'prefix-except-default'` |
+
+## Routing Strategies
+
+### prefix
+
+Every locale, including the default, gets a URL prefix. This means all routes are explicitly locale-scoped:
+
+```txt
+/en           -> English home page
+/fr           -> French home page
+/en/about     -> English about page
+/fr/about     -> French about page
+```
+
+Requests to `/` without a locale prefix are redirected to the detected or default locale.
+
+### prefix-except-default
+
+The default locale has no prefix while all other locales are prefixed. This is the most common strategy for sites with a primary language:
+
+```txt
+/             -> English home page (default, no prefix)
+/about        -> English about page
+/fr           -> French home page
+/fr/about     -> French about page
+```
+
+## Detecting the Locale
+
+### Client Components
+
+Use the `useLocale()` hook from `catmint/i18n` to read the current locale in client components:
+
+```tsx
+// app/components/LanguageBanner.client.tsx
+import { useLocale } from "catmint/i18n";
+
+export default function LanguageBanner() {
+  const locale = useLocale();
+
+  return <p>Current language: {locale}</p>;
+}
+```
+
+The `useLocale()` hook returns the locale string (e.g., `"en"`, `"fr"`) resolved from the current URL.
+
+### Server-Side
+
+In server functions, middleware, and endpoints, use the `getLocale()` function:
+
+```ts
+// app/greeting.fn.ts
+import { createServerFn } from "catmint/server";
+import { getLocale } from "catmint/i18n";
+
+export const getGreeting = createServerFn(async () => {
+  const locale = getLocale();
+
+  const greetings: Record<string, string> = {
+    en: "Hello",
+    fr: "Bonjour",
+    de: "Hallo",
+    ja: "Konnichiwa",
+  };
+
+  return greetings[locale] ?? greetings.en;
+});
+```
+
+## Accept-Language Detection
+
+When a user visits your site without a locale prefix, Catmint parses the `Accept-Language` header from the request to determine the best matching locale. The matching algorithm:
+
+1. Parse the `Accept-Language` header and sort by quality value
+2. Match each language tag against the configured `locales` list
+3. If a match is found, redirect to the appropriate locale path
+4. If no match is found, use the `defaultLocale`
+
+```txt
+// Request with Accept-Language: fr-FR,fr;q=0.9,en;q=0.8
+// With strategy 'prefix', user is redirected to /fr
+// With strategy 'prefix-except-default', user is redirected to /fr
+```
+
+> Language detection only applies to the initial request without a locale prefix. Once the user navigates to a locale-prefixed URL, that locale is used directly.
+
+## Loading Translations
+
+Catmint does not prescribe a specific translation library. You can use any approach that fits your needs. A common pattern is to load JSON translation files based on the current locale:
+
+```ts
+// app/i18n/translations.ts
+const translations: Record<string, Record<string, string>> = {
+  en: {
+    "nav.home": "Home",
+    "nav.about": "About",
+    "nav.contact": "Contact",
+  },
+  fr: {
+    "nav.home": "Accueil",
+    "nav.about": "A propos",
+    "nav.contact": "Contact",
+  },
+};
+
+export function t(locale: string, key: string): string {
+  return translations[locale]?.[key] ?? translations.en[key] ?? key;
+}
+```
+
+```tsx
+// app/components/Nav.client.tsx
+import { useLocale } from "catmint/i18n";
+import { t } from "../i18n/translations";
+
+export function Nav() {
+  const locale = useLocale();
+
+  return (
+    <nav>
+      <a href="/">{t(locale, "nav.home")}</a>
+      <a href="/about">{t(locale, "nav.about")}</a>
+      <a href="/contact">{t(locale, "nav.contact")}</a>
+    </nav>
+  );
+}
+```
+
+## Locale-Aware Links
+
+When i18n is enabled, Catmint's `<Link>` component automatically prefixes href values with the current locale when using the `prefix` strategy. You can also switch locales by passing the `locale` prop:
+
+```tsx
+import { Link } from 'catmint/link'
+
+// Stays in the current locale
+<Link href="/about">About</Link>
+
+// Switches to French
+<Link href="/about" locale="fr">A propos</Link>
+```
+
+## Language Switcher
+
+Build a language switcher by reading the available locales from config and linking to the current page in each locale:
+
+```tsx
+// app/components/LanguageSwitcher.client.tsx
+import { useLocale, usePathname } from "catmint/i18n";
+import { Link } from "catmint/link";
+
+const locales = ["en", "fr", "de", "ja"];
+const labels: Record<string, string> = {
+  en: "English",
+  fr: "Francais",
+  de: "Deutsch",
+  ja: "Japanese",
+};
+
+export function LanguageSwitcher() {
+  const currentLocale = useLocale();
+  const pathname = usePathname();
+
+  return (
+    <ul>
+      {locales.map((locale) => (
+        <li key={locale}>
+          <Link
+            href={pathname}
+            locale={locale}
+            aria-current={locale === currentLocale ? "page" : undefined}
+          >
+            {labels[locale]}
+          </Link>
+        </li>
+      ))}
+    </ul>
+  );
+}
+```
+
+## Setting the HTML Lang Attribute
+
+Use `getLocale()` in your root layout to set the `lang` attribute on the `<html>` element:
+
+```tsx
+// app/layout.tsx
+import React from "react";
+import { getLocale } from "catmint/i18n";
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const locale = getLocale();
+
+  return (
+    <html lang={locale}>
+      <head>
+        <meta charSet="utf-8" />
+      </head>
+      <body>{children}</body>
+    </html>
+  );
+}
+```

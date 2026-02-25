@@ -1,0 +1,74 @@
+# useHead
+
+React hook for dynamically updating head tags from client components. Accepts a `HeadConfig` object and applies it to the document head. When a `HeadProvider` is available, updates are coordinated through context; otherwise changes are applied directly to `document.head`.
+
+## Import
+
+```ts
+import { useHead } from 'catmint/head'
+```
+
+## Signature
+
+```ts
+function useHead(config: HeadConfig): void
+```
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `config` | `HeadConfig` | Yes | Head configuration describing which tags to set |
+
+### `HeadConfig`
+
+```ts
+interface HeadConfig {
+  title?: string
+  meta?: Array<{ name?: string; property?: string; content: string }>
+  link?: Array<{ rel: string; href: string; [key: string]: string }>
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `title` | `string` | Document title |
+| `meta` | `Array<{ name?, property?, content }>` | Meta tag definitions |
+| `link` | `Array<{ rel, href, ... }>` | Link tag definitions |
+
+## Return Value
+
+`void` — This hook does not return a value.
+
+## Examples
+
+```tsx
+import { useHead } from 'catmint/head'
+
+function Dashboard({ unreadCount }) {
+  useHead({ title: `(${unreadCount}) Dashboard` })
+
+  return <div>...</div>
+}
+```
+
+```tsx
+// Setting meta tags dynamically
+function ProductPage({ product }) {
+  useHead({
+    title: product.name,
+    meta: [
+      { name: 'description', content: product.description },
+      { property: 'og:title', content: product.name },
+      { property: 'og:image', content: product.imageUrl },
+    ],
+  })
+
+  return <div>...</div>
+}
+```
+
+## See Also
+
+- [Head](/api/Head)
+- [generateMetadata](/api/generateMetadata)

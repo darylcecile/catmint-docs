@@ -1,0 +1,70 @@
+# useParams
+
+React hook that returns the typed route parameters for the current route. The framework automatically provides the router context — no manual setup required.
+
+## Import
+
+```ts
+import { useParams } from "catmint/hooks";
+```
+
+## Signature
+
+```ts
+function useParams<
+  T extends Record<string, string | string[]> = Record<string, string>,
+>(route?: string): T;
+```
+
+## Parameters
+
+| Parameter | Type     | Required | Description                                                     |
+| --------- | -------- | -------- | --------------------------------------------------------------- |
+| `route`   | `string` | No       | Optional route pattern for type narrowing (e.g. `'/user/[id]'`) |
+
+## Type Parameters
+
+| Parameter | Default                  | Description                                |
+| --------- | ------------------------ | ------------------------------------------ |
+| `T`       | `Record<string, string>` | The expected shape of the route parameters |
+
+## Return Value
+
+Returns `T` — an object containing the current route's dynamic parameters. For example, a route pattern `/user/[id]` produces `{ id: string }`.
+
+## Errors
+
+Throws if the router context is missing (this should not happen in normal usage — the framework injects it automatically).
+
+## Examples
+
+```tsx
+import { useParams } from "catmint/hooks";
+
+// Basic usage
+function UserProfile() {
+  const { id } = useParams<{ id: string }>();
+  return <p>User ID: {id}</p>;
+}
+```
+
+```tsx
+// With route hint for type narrowing
+function BlogPost() {
+  const { slug } = useParams("/blog/[slug]");
+  return <h1>Post: {slug}</h1>;
+}
+```
+
+```tsx
+// Catch-all route parameters
+function DocsPage() {
+  const { path } = useParams<{ path: string[] }>();
+  return <p>Path segments: {path.join("/")}</p>;
+}
+```
+
+## See Also
+
+- [useSearch](/api/useSearch)
+- [provideRouteData](/api/provideRouteData)

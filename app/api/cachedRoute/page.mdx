@@ -1,0 +1,110 @@
+# cachedRoute
+
+Wrap a page or endpoint handler with caching. Catmint takes an explicit, opt-in approach to caching — nothing is cached by default. Use `cachedRoute` to enable caching with TTL, tag-based invalidation, and stale-while-revalidate support.
+
+## Import
+
+```ts
+import { cachedRoute } from 'catmint/cache'
+```
+
+## Signature
+
+```ts
+function cachedRoute<T>(
+  handler: (...args: any[]) => T | Promise<T>,
+  options?: CacheOptions,
+): (...args: any[]) => Promise<T>
+```
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `handler` | `(...args: any[]) => T \| Promise<T>` | Yes | The page component or endpoint handler to cache. |
+| `options` | `CacheOptions` | No | Cache configuration. |
+
+### `CacheOptions`
+
+```ts
+interface CacheOptions {
+  tag?: string[]
+  revalidate?: number
+  staleWhileRevalidate?: boolean
+}
+```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `tag` | `string[]` | `[]` | Cache tags for targeted invalidation. |
+| `revalidate` | `number` | — | Time in **seconds** before the cache entry is considered stale. Omit for no expiry. |
+| `staleWhileRevalidate` | `boolean` | `true` | Serve stale content while revalidating in the background. |
+
+## Return Value
+
+Returns a new async handler function that wraps the original with caching logic. The wrapper has a `__catmintCache` metadata property containing the cache options, which the framework reads for deployment integration.
+
+## Cache Behavior
+
+1. **Cache hit (fresh)** — Returns the cached value immediately.
+2. **Cache hit (stale, SWR enabled)** — Returns the stale value immediately and triggers a background revalidation.
+3. **Cache hit (stale, SWR disabled)** — Evicts the entry and executes the handler.
+4. **Cache miss** — Executes the handler, caches the result, and returns it.
+
+Cache keys are generated from the handler name and serialized arguments.
+
+## Deployment Integration
+
+When deployed, cache metadata is exposed to the infrastructure:
+
+| Signal | Usage |
+|--------|-------|
+| `revalidate` | Sets `Cache-Control: s-maxage=<value>` and `stale-while-revalidate` |
+| `tag` | Sets `Cache-Tag` header for CDN tag-based invalidation |
+
+## Examples
+
+```tsx
+// Cached page
+import { cachedRoute } from 'catmint/cache'
+
+export default cachedRoute(async function HomePage() {
+  const data = await fetchExpensiveData()
+  return <div>{data}</div>
+}, {
+  tag: ['homepage', 'featured'],
+  revalidate: 3000,
+})
+```
+
+```ts
+// Cached endpoint
+import { cachedRoute } from 'catmint/cache'
+
+export const GET = cachedRoute(async () => {
+  const sitemap = await generateSitemap()
+  return new Response(sitemap, {
+    headers: { 'Content-Type': 'application/xml' },
+  })
+}, {
+  tag: ['sitemap'],
+  revalidate: 86400, // 24 hours
+})
+```
+
+```ts
+// Invalidating cached entries
+import { invalidateCache } from 'catmint/cache'
+
+// Invalidate by tag
+await invalidateCache({ tag: 'homepage' })
+
+// Invalidate by route pattern
+await invalidateCache({ route: '/blog/[slug]' })
+```
+
+## See Also
+
+- [createServerFn](/api/createServerFn)
+- [Endpoints](/api/endpoints)
+- [config](/api/config)

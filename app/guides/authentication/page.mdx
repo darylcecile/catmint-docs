@@ -1,0 +1,425 @@
+# Authentication
+
+Catmint does not include a built-in authentication system. Instead, it provides
+the primitives -- cookies, middleware, server functions, and AsyncLocalStorage
+context -- to implement authentication patterns that fit your requirements. This
+guide covers common patterns for session-based auth, route protection, and
+role-based access control.
+
+## Session-Based Authentication
+
+The most common pattern uses HTTP-only cookies to store a session identifier.
+The session is validated on each request via middleware.
+
+### Login Server Function
+
+```ts
+// app/auth/login.fn.ts
+import { createServerFn } from "catmint/server";
+import { cookies } from "catmint/cookies";
+
+export const login = createServerFn(
+  async (input: { email: string; password: string }) => {
+    const user = await db.users.findByEmail(input.email);
+
+    if (!user || !(await verifyPassword(input.password, user.passwordHash))) {
+      throw new Error("Invalid email or password");
+    }
+
+    const session = await db.sessions.create({
+      data: {
+        userId: user.id,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      },
+    });
+
+    cookies().set("session", session.id, {
+      httpOnly: true,
+      secure: true,
+      sameSite: "lax",
+      path: "/",
+      maxAge: 7 * 24 * 60 * 60,
+    });
+
+    return { user: { id: user.id, email: user.email, role: user.role } };
+  },
+);
+```
+
+### Logout Server Function
+
+```ts
+// app/auth/logout.fn.ts
+import { createServerFn } from "catmint/server";
+import { cookies } from "catmint/cookies";
+
+export const logout = createServerFn(async () => {
+  const sessionId = cookies().get("session")?.value;
+
+  if (sessionId) {
+    await db.sessions.delete({ where: { id: sessionId } });
+  }
+
+  cookies().delete("session", {
+    httpOnly: true,
+    secure: true,
+    sameSite: "lax",
+    path: "/",
+  });
+
+  return { success: true };
+});
+```
+
+### Login Page
+
+```tsx
+// app/login/page.client.tsx
+import { useState } from "react";
+import { login } from "../auth/login.fn";
+
+export default function LoginPage() {
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError(null);
+
+    const formData = new FormData(e.currentTarget);
+    try {
+      await login({
+        email: formData.get("email") as string,
+        password: formData.get("password") as string,
+      });
+      window.location.href = "/dashboard";
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      {error && <p>{error}</p>}
+      <input name="email" type="email" required />
+      <input name="password" type="password" required />
+      <button type="submit">Sign in</button>
+    </form>
+  );
+}
+```
+
+## Protecting Routes with Middleware
+
+Use middleware to validate the session cookie and protect routes. The middleware
+runs before the page renders and can redirect unauthenticated users.
+
+```ts
+// app/(protected)/middleware.ts
+import { defineMiddleware } from "catmint/middleware";
+import { cookies } from "catmint/cookies";
+
+export const middleware = defineMiddleware(async (ctx) => {
+  const sessionId = cookies().get("session")?.value;
+
+  if (!sessionId) {
+    return new Response(null, {
+      status: 302,
+      headers: { Location: "/login" },
+    });
+  }
+
+  const session = await db.sessions.findUnique({
+    where: { id: sessionId },
+    include: { user: true },
+  });
+
+  if (!session || session.expiresAt < new Date()) {
+    cookies().delete("session");
+    return new Response(null, {
+      status: 302,
+      headers: { Location: "/login" },
+    });
+  }
+
+  // Store the user in context for downstream use
+  ctx.set("user", session.user);
+
+  return ctx.next();
+});
+```
+
+Place this middleware inside a route group to protect all routes within it:
+
+```txt
+app/
+  (public)/
+    login/page.tsx          # Not protected
+    signup/page.tsx         # Not protected
+  (protected)/
+    middleware.ts           # Auth middleware
+    dashboard/page.tsx      # Protected
+    settings/page.tsx       # Protected
+    profile/page.tsx        # Protected
+```
+
+## Auth Context with AsyncLocalStorage
+
+Catmint uses `AsyncLocalStorage` to
+propagate request context through the middleware chain, server functions, and
+layout rendering. Once a user is stored in context by middleware, it can be
+accessed anywhere on the server side during that request.
+
+```ts
+// app/auth/context.ts
+import { createContext } from "catmint/context";
+
+type User = {
+  id: string;
+  email: string;
+  role: "admin" | "user";
+};
+
+export const authContext = createContext<User | null>("auth", null);
+```
+
+```ts
+// app/(protected)/middleware.ts
+import { defineMiddleware } from "catmint/middleware";
+import { cookies } from "catmint/cookies";
+import { authContext } from "../auth/context";
+
+export const middleware = defineMiddleware(async (ctx) => {
+  const sessionId = cookies().get("session")?.value;
+
+  if (!sessionId) {
+    return new Response(null, {
+      status: 302,
+      headers: { Location: "/login" },
+    });
+  }
+
+  const session = await db.sessions.findUnique({
+    where: { id: sessionId },
+    include: { user: true },
+  });
+
+  if (!session || session.expiresAt < new Date()) {
+    return new Response(null, {
+      status: 302,
+      headers: { Location: "/login" },
+    });
+  }
+
+  authContext.set(session.user);
+
+  return ctx.next();
+});
+```
+
+```ts
+// app/dashboard/data.fn.ts
+import { createServerFn } from "catmint/server";
+import { authContext } from "../auth/context";
+
+export const getDashboardData = createServerFn(async () => {
+  const user = authContext.get();
+
+  if (!user) {
+    throw new Error("Unauthorized");
+  }
+
+  return db.dashboardData.findMany({
+    where: { userId: user.id },
+  });
+});
+```
+
+## Role-Based Access Control
+
+Extend the auth middleware to enforce role-based access. You can create
+separate middleware for different access levels:
+
+```ts
+// app/(admin)/middleware.ts
+import { defineMiddleware } from "catmint/middleware";
+import { authContext } from "../auth/context";
+
+export const middleware = defineMiddleware(async (ctx) => {
+  const user = authContext.get();
+
+  if (!user) {
+    return new Response(null, {
+      status: 302,
+      headers: { Location: "/login" },
+    });
+  }
+
+  if (user.role !== "admin") {
+    return new Response("Forbidden", { status: 403 });
+  }
+
+  return ctx.next();
+});
+```
+
+The directory layout controls which middleware applies:
+
+```txt
+app/
+  middleware.ts                  # Root: session validation
+  (protected)/
+    middleware.ts                # Requires authenticated user
+    dashboard/page.tsx           # Any authenticated user
+    profile/page.tsx             # Any authenticated user
+  (admin)/
+    middleware.ts                # Requires admin role
+    admin/page.tsx               # Admin only
+    admin/users/page.tsx         # Admin only
+```
+
+## JWT Patterns
+
+For stateless authentication, you can use JWTs instead of database-backed
+sessions. The token is stored in a cookie and validated in middleware without
+a database lookup.
+
+```ts
+// app/auth/jwt.server.ts
+import { SignJWT, jwtVerify } from "jose";
+import { env } from "catmint/env";
+
+const secret = new TextEncoder().encode(env.private.JWT_SECRET);
+
+export async function signToken(payload: { userId: string; role: string }) {
+  return new SignJWT(payload)
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime("7d")
+    .sign(secret);
+}
+
+export async function verifyToken(token: string) {
+  try {
+    const { payload } = await jwtVerify(token, secret);
+    return payload as { userId: string; role: string };
+  } catch {
+    return null;
+  }
+}
+```
+
+```ts
+// app/auth/login.fn.ts
+import { createServerFn } from "catmint/server";
+import { cookies } from "catmint/cookies";
+import { signToken } from "./jwt.server";
+
+export const login = createServerFn(
+  async (input: { email: string; password: string }) => {
+    const user = await db.users.findByEmail(input.email);
+
+    if (!user || !(await verifyPassword(input.password, user.passwordHash))) {
+      throw new Error("Invalid email or password");
+    }
+
+    const token = await signToken({ userId: user.id, role: user.role });
+
+    cookies().set("token", token, {
+      httpOnly: true,
+      secure: true,
+      sameSite: "lax",
+      path: "/",
+      maxAge: 7 * 24 * 60 * 60,
+    });
+
+    return { user: { id: user.id, email: user.email } };
+  },
+);
+```
+
+```ts
+// app/(protected)/middleware.ts
+import { defineMiddleware } from "catmint/middleware";
+import { cookies } from "catmint/cookies";
+import { verifyToken } from "../auth/jwt.server";
+import { authContext } from "../auth/context";
+
+export const middleware = defineMiddleware(async (ctx) => {
+  const token = cookies().get("token")?.value;
+
+  if (!token) {
+    return new Response(null, {
+      status: 302,
+      headers: { Location: "/login" },
+    });
+  }
+
+  const payload = await verifyToken(token);
+
+  if (!payload) {
+    cookies().delete("token");
+    return new Response(null, {
+      status: 302,
+      headers: { Location: "/login" },
+    });
+  }
+
+  authContext.set({ id: payload.userId, role: payload.role });
+
+  return ctx.next();
+});
+```
+
+> Store the JWT secret in `env.private` to
+> prevent it from leaking to the client bundle. Use the `.server.ts` suffix for
+> modules that handle token signing and verification.
+
+## Protecting Server Functions
+
+Server functions run on the server but are callable from client code. Always
+verify authentication inside server functions that access private data:
+
+```ts
+// app/settings/actions.fn.ts
+import { createServerFn } from "catmint/server";
+import { authContext } from "../auth/context";
+
+export const updateProfile = createServerFn(
+  async (input: { name: string; bio: string }) => {
+    const user = authContext.get();
+
+    if (!user) {
+      throw new Error("Unauthorized");
+    }
+
+    return db.users.update({
+      where: { id: user.id },
+      data: { name: input.name, bio: input.bio },
+    });
+  },
+);
+```
+
+For a reusable pattern, create a helper that wraps server functions with
+an auth check:
+
+```ts
+// app/auth/require.server.ts
+import { authContext } from "./context";
+
+export function requireAuth() {
+  const user = authContext.get();
+  if (!user) {
+    throw new Error("Unauthorized");
+  }
+  return user;
+}
+
+export function requireRole(role: string) {
+  const user = requireAuth();
+  if (user.role !== role) {
+    throw new Error("Forbidden");
+  }
+  return user;
+}
+```

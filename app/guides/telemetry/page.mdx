@@ -1,0 +1,253 @@
+# Telemetry
+
+Catmint integrates with [OpenTelemetry](https://opentelemetry.io) to
+provide auto-instrumentation for HTTP requests, server functions, and middleware.
+You can also create custom spans and use structured logging with trace correlation.
+
+## Configuration
+
+Enable telemetry in your `catmint.config.ts`:
+
+```ts
+// catmint.config.ts
+import { defineConfig } from 'catmint/config'
+
+export default defineConfig({
+  mode: 'fullstack',
+  telemetry: {
+    enabled: true,
+    serviceName: 'my-app',
+    exporter: 'otlp',
+  },
+})
+```
+
+### Configuration Options
+
+| Option | Type | Description |
+| --- | --- | --- |
+| `enabled` | `boolean` | Enables or disables telemetry collection |
+| `serviceName` | `string` | Identifies this service in your observability backend |
+| `exporter` | `'otlp' \| 'console'` | Where to send telemetry data. Use `'console'` for local debugging. |
+
+## Auto-Instrumentation
+
+When telemetry is enabled, Catmint automatically instruments the following:
+
+- **HTTP requests** -- incoming requests create a root span with method, URL, status code, and duration
+- **Server functions** -- each server function call creates a child span with the function name
+- **Middleware** -- each middleware in the chain creates a span showing execution order and timing
+- **Route resolution** -- the matched route pattern is recorded as a span attribute
+
+No code changes are required for auto-instrumented spans. They are created
+automatically when the telemetry configuration is present.
+
+## Custom Spans with trace()
+
+Use the `trace()` function from `catmint/telemetry` to create
+custom spans for your application logic. The span wraps an async function and
+automatically records its duration, success, or failure.
+
+```ts
+import { trace } from 'catmint/telemetry'
+
+export async function processOrder(orderId: string) {
+  return trace('order.process', async (span) => {
+    span.setAttribute('order.id', orderId)
+
+    const order = await trace('order.fetch', async () => {
+      return db.orders.findUnique({ where: { id: orderId } })
+    })
+
+    if (!order) {
+      span.setAttribute('order.found', false)
+      throw new Error(`Order ${orderId} not found`)
+    }
+
+    span.setAttribute('order.found', true)
+    span.setAttribute('order.total', order.total)
+
+    const payment = await trace('payment.charge', async () => {
+      return paymentProvider.charge(order.total, order.paymentMethod)
+    })
+
+    span.setAttribute('payment.status', payment.status)
+    return { order, payment }
+  })
+}
+```
+
+### Span Attributes
+
+Attributes are key-value pairs attached to a span. They provide context for
+debugging and analysis. Use `span.setAttribute()` to
+add them:
+
+```ts
+trace('user.lookup', async (span) => {
+  span.setAttribute('user.email', email)
+  span.setAttribute('user.source', 'database')
+
+  const user = await db.users.findByEmail(email)
+
+  span.setAttribute('user.found', !!user)
+  span.setAttribute('user.role', user?.role ?? 'none')
+
+  return user
+})
+```
+
+### Error Recording
+
+When the function passed to `trace()` throws
+an error, the span is automatically marked with an error status and the exception
+is recorded. You can also record errors manually:
+
+```ts
+trace('email.send', async (span) => {
+  try {
+    await sendEmail(to, subject, body)
+    span.setAttribute('email.sent', true)
+  } catch (err) {
+    span.recordException(err as Error)
+    span.setAttribute('email.sent', false)
+    // The error is recorded but not re-thrown,
+    // so the span ends with an error status
+    // without crashing the request
+  }
+})
+```
+
+### Span Nesting
+
+Nested calls to `trace()` automatically
+create parent-child relationships. This produces a trace tree that shows the
+execution flow:
+
+```txt
+// Trace tree visualization:
+//
+// HTTP GET /orders/abc123          [200ms]
+//   middleware.auth                 [5ms]
+//   route.resolve                   [1ms]
+//   order.process                   [180ms]
+//     order.fetch                   [20ms]
+//     payment.charge                [150ms]
+//   response.serialize              [2ms]
+```
+
+## Structured Logging
+
+The `logger` from `catmint/telemetry` provides a
+structured logging API that automatically correlates log entries with the current
+trace and span context.
+
+```ts
+import { logger } from 'catmint/telemetry'
+
+logger.info('User signed in', { userId: user.id, method: 'password' })
+logger.warn('Rate limit approaching', { remaining: 5, endpoint: '/api/data' })
+logger.error('Payment failed', { orderId, error: err.message })
+```
+
+### Trace Correlation
+
+Log entries emitted within a `trace()` block
+automatically include the trace ID and span ID. This makes it easy to find all
+logs associated with a single request in your observability backend.
+
+```ts
+import { trace, logger } from 'catmint/telemetry'
+
+trace('order.fulfill', async (span) => {
+  logger.info('Starting fulfillment', { orderId })
+  // Log output includes:
+  // {
+  //   "level": "info",
+  //   "message": "Starting fulfillment",
+  //   "orderId": "abc123",
+  //   "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+  //   "spanId": "00f067aa0ba902b7"
+  // }
+
+  await shipOrder(orderId)
+  logger.info('Order shipped', { orderId })
+})
+```
+
+### Log Levels
+
+| Method | Use Case |
+| --- | --- |
+| `logger.debug()` | Verbose debugging information, disabled by default in production |
+| `logger.info()` | General informational messages about application state |
+| `logger.warn()` | Warning conditions that should be investigated |
+| `logger.error()` | Error conditions that need immediate attention |
+
+## OTLP Export
+
+With `exporter: 'otlp'`, traces
+and logs are exported using the OpenTelemetry Protocol. Configure the endpoint
+via environment variables:
+
+```bash
+# .env
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+OTEL_EXPORTER_OTLP_HEADERS=Authorization=Bearer my-token
+```
+
+This works with any OTLP-compatible backend, including:
+
+- **Jaeger** -- distributed tracing backend
+- **Grafana Tempo** -- trace storage for the Grafana stack
+- **Honeycomb** -- observability platform with trace analysis
+- **Datadog** -- monitoring and analytics with OTLP ingest
+- **New Relic** -- full-stack observability with OTLP support
+
+## Console Exporter
+
+During development, use the `'console'` exporter
+to print spans and logs directly to the terminal:
+
+```ts
+// catmint.config.ts
+export default defineConfig({
+  telemetry: {
+    enabled: true,
+    serviceName: 'my-app',
+    exporter: 'console',
+  },
+})
+```
+
+This prints a formatted summary of each span to stdout, making it easy to
+trace request flow during development without running a full observability stack.
+
+## Example: Instrumenting a Server Function
+
+```ts
+// app/orders/actions.fn.ts
+import { createServerFn } from 'catmint/server'
+import { trace, logger } from 'catmint/telemetry'
+
+export const createOrder = createServerFn(async (input: OrderInput) => {
+  return trace('order.create', async (span) => {
+    span.setAttribute('order.items', input.items.length)
+
+    logger.info('Creating order', { itemCount: input.items.length })
+
+    const order = await trace('db.insert', async () => {
+      return db.orders.create({ data: input })
+    })
+
+    span.setAttribute('order.id', order.id)
+
+    await trace('notification.send', async () => {
+      await sendOrderConfirmation(order)
+    })
+
+    logger.info('Order created', { orderId: order.id })
+    return order
+  })
+})
+```

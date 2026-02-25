@@ -1,0 +1,84 @@
+# ADR-002: File Naming Conventions
+
+## Status
+
+Accepted
+
+## Context
+
+Catmint's `app/` directory uses file-based routing and colocates server components, client components, server functions, layouts, middleware, and error boundaries within the same directory tree. The framework needs a consistent, unambiguous way to determine:
+
+1. What role a file plays (page, layout, endpoint, error boundary, etc.)
+2. What execution boundary a file belongs to (server-only, client-only, isomorphic)
+3. What compile-time transforms should be applied to a file
+
+Without clear conventions, developers would need explicit configuration or manual directives in every file, and the build tool would have no reliable way to enforce boundary safety at compile time.
+
+## Decision
+
+File names in the `app/` directory encode semantic meaning through specific patterns. The `catmint-vite` plugin uses these patterns to determine behavior at compile time.
+
+### Reserved file names
+
+| File | Purpose |
+|---|---|
+| `page.tsx` | Route page component (server component by default) |
+| `layout.tsx` | Layout component wrapping child pages |
+| `error.tsx` | Error boundary component (`"use client"` auto-injected) |
+| `loading.tsx` | Suspense fallback UI |
+| `endpoint.ts` | API endpoint handler |
+| `middleware.ts` | Route middleware |
+| `DDD.tsx` | Status page for HTTP status code `DDD` (e.g., `404.tsx`, `500.tsx`) |
+
+### Extension-based conventions
+
+| Pattern | Boundary | Behavior |
+|---|---|---|
+| `*.client.tsx` | Client | `"use client"` directive auto-injected at compile time. Hydrated in the browser. |
+| `*.server.tsx` | Server | Rendered on server only. Never included in the client bundle. Imports from client code produce a build error. |
+| `*.fn.ts` | Server | Server function definitions. On the server, functions execute directly. In the client bundle, calls are compiled to `fetch()` requests to auto-generated endpoints. |
+
+### Implicit rules
+
+- `page.tsx` and `layout.tsx` are **server components by default** — no directive needed.
+- `error.tsx` is always a client component — the `"use client"` directive is injected automatically because React error boundaries require client-side state.
+- A route directory cannot have both a `page.tsx` and an `endpoint.ts` that handles `GET` requests (build error).
+
+## Rationale
+
+- **Compile-time enforcement.** By encoding boundary information in file names, the `catmint-vite` plugin can statically analyze the module graph and enforce safety rules without runtime checks. Importing a `*.server.ts` module from a `*.client.tsx` file is a build error, not a runtime surprise.
+- **Automatic directive injection.** Developers never need to manually write `"use client"` — naming a file `*.client.tsx` or `error.tsx` is sufficient. This eliminates a common source of bugs where forgetting the directive causes server code to leak into the client bundle.
+- **Server function compilation.** The `*.fn.ts` convention gives the build tool a clear signal to apply the server function transform — replacing function bodies with `fetch()` stubs in the client bundle and generating API endpoints on the server.
+- **Discoverability.** A developer can look at any file in the `app/` directory and immediately understand its role and execution context from the name alone, without reading the file contents.
+- **Colocation.** Related files live together in the same directory. A route's page, client interactions, server data fetching, and error handling are all in one place:
+
+```txt
+app/dashboard/
+├── page.tsx              # Server component (page)
+├── stats.server.tsx      # Server component (data fetching)
+├── chart.client.tsx      # Client component (interactive)
+├── data.fn.ts            # Server functions
+├── error.tsx             # Error boundary (auto client)
+└── loading.tsx           # Suspense fallback
+```
+
+## Alternatives Considered
+
+- **Manual `"use client"` / `"use server"` directives only.** This is the approach React itself recommends. However, relying solely on directives makes it impossible for the build tool to enforce boundaries before parsing file contents. It also introduces a class of bugs where a missing directive silently changes execution context. Catmint's file-name conventions layer on top of React's directive model — the directives are still emitted, just automatically.
+- **Configuration-based boundaries.** A config file (e.g., `catmint.config.ts`) could declare which files are server-only or client-only. This adds indirection — developers would need to check the config to understand a file's boundary. It also scales poorly as the project grows.
+- **Directory-based separation** (e.g., `server/` and `client/` directories). This forces an artificial split that breaks colocation. Related files for a single route would live in different directory trees, making navigation harder.
+
+## Consequences
+
+**Positive:**
+
+- Boundary violations are caught at build time with clear error messages.
+- No manual `"use client"` boilerplate — the convention handles it.
+- The file tree is self-documenting. New team members can understand the project structure without reading documentation.
+- The `catmint-vite` plugin can apply targeted transforms based on file patterns, keeping the compilation pipeline efficient.
+
+**Negative:**
+
+- More restrictive than a convention-free approach. Developers must learn and follow the naming rules.
+- Files that don't fit neatly into the convention (e.g., a utility that runs on both server and client) require careful placement — they should be plain `.ts` files without a boundary suffix.
+- Renaming a file from `foo.tsx` to `foo.client.tsx` changes its execution boundary, which could be surprising if the developer doesn't understand the convention.

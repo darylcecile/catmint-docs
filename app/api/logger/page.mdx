@@ -1,0 +1,90 @@
+# logger
+
+Structured logger that correlates with OpenTelemetry traces. When telemetry is enabled, log entries automatically include `traceId` and `spanId` from the active span, enabling log-trace correlation.
+
+## Import
+
+```ts
+import { logger } from 'catmint/telemetry'
+```
+
+## Signature
+
+```ts
+const logger: {
+  debug(message: string, attributes?: Record<string, unknown>): void
+  info(message: string, attributes?: Record<string, unknown>): void
+  warn(message: string, attributes?: Record<string, unknown>): void
+  error(message: string, attributes?: Record<string, unknown>): void
+}
+```
+
+## Methods
+
+| Method | Description |
+|--------|-------------|
+| `logger.debug(message, attributes?)` | Log at debug level. Maps to `console.debug`. |
+| `logger.info(message, attributes?)` | Log at info level. Maps to `console.info`. |
+| `logger.warn(message, attributes?)` | Log at warn level. Maps to `console.warn`. |
+| `logger.error(message, attributes?)` | Log at error level. Maps to `console.error`. |
+
+### Method Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `message` | `string` | Yes | The log message. |
+| `attributes` | `Record<string, unknown>` | No | Structured key-value data attached to the log entry. |
+
+## Behavior
+
+### Telemetry Disabled
+
+Logs are output to the console with simple formatting:
+
+```txt
+[info] Dashboard accessed { userId: '123' }
+```
+
+### Telemetry Enabled
+
+Logs are output as structured JSON with trace correlation:
+
+```json
+{
+  "level": "info",
+  "message": "Dashboard accessed",
+  "timestamp": "2026-02-23T12:00:00.000Z",
+  "traceId": "abc123...",
+  "spanId": "def456...",
+  "serviceName": "my-app",
+  "attributes": { "userId": "123" }
+}
+```
+
+When called inside a `trace()` block, the `traceId` and `spanId` of the active span are automatically attached.
+
+## Examples
+
+```ts
+import { logger } from 'catmint/telemetry'
+
+logger.info('Dashboard accessed', { userId: user.id })
+logger.error('Payment failed', { orderId, error: err.message })
+logger.debug('Cache hit', { key: cacheKey })
+logger.warn('Rate limit approaching', { remaining: 10 })
+```
+
+```ts
+// Logs inside a trace span include trace correlation
+import { trace, logger } from 'catmint/telemetry'
+
+await trace('order.process', async (span) => {
+  logger.info('Processing order', { orderId: '123' })
+  // Log entry includes traceId and spanId from the active span
+})
+```
+
+## See Also
+
+- [trace](/api/trace)
+- [defineConfig](/api/config) (telemetry configuration)

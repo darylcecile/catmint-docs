@@ -1,0 +1,190 @@
+# Cookies
+
+Catmint provides an isomorphic `cookies` API imported from `catmint/cookies`. On the server, it reads from the incoming `Request` headers via `AsyncLocalStorage`. On the client, it reads from `document.cookie`. The same code works in both environments without conditional logic.
+
+## Basic Usage
+
+```ts
+import { cookies } from 'catmint/cookies'
+
+// Read a cookie
+const theme = cookies.get('theme')
+
+// Set a cookie
+cookies.set('theme', 'dark', { path: '/', maxAge: 60 * 60 * 24 * 365 })
+
+// Delete a cookie
+cookies.delete('theme')
+
+// Get all cookies as an object
+const all = cookies.getAll()
+```
+
+## API Reference
+
+### cookies.get(name)
+
+Returns the value of the cookie with the given name, or `undefined` if it does not exist.
+
+```ts
+const sessionId = cookies.get('session_id')
+
+if (!sessionId) {
+  // No session cookie found
+}
+```
+
+### cookies.set(name, value, options?)
+
+Sets a cookie with the given name and value. On the server, this appends a `Set-Cookie` header to the outgoing response. On the client, it writes to `document.cookie`.
+
+```ts
+cookies.set('session_id', token, {
+  httpOnly: true,
+  secure: true,
+  sameSite: 'lax',
+  path: '/',
+  maxAge: 60 * 60 * 24 * 7, // 7 days
+})
+```
+
+### cookies.delete(name, options?)
+
+Deletes a cookie by setting its `maxAge` to `0`. Pass the same `path` and `domain` options that were used when the cookie was set to ensure it is properly removed.
+
+```ts
+cookies.delete('session_id', { path: '/' })
+```
+
+### cookies.getAll()
+
+Returns all cookies as a plain object with string keys and values:
+
+```ts
+const all = cookies.getAll()
+// { session_id: 'abc123', theme: 'dark', locale: 'en' }
+```
+
+## Cookie Options
+
+The options object passed to `cookies.set` and `cookies.delete` supports all standard cookie attributes:
+
+| Option | Type | Description |
+| --- | --- | --- |
+| `httpOnly` | `boolean` | Prevents client-side JavaScript from accessing the cookie. Recommended for session tokens. |
+| `secure` | `boolean` | Only send the cookie over HTTPS connections. |
+| `sameSite` | `'strict' \| 'lax' \| 'none'` | Controls cross-site request behavior. Use `'lax'` for most cases. |
+| `path` | `string` | The URL path the cookie is valid for. Defaults to `'/'`. |
+| `maxAge` | `number` | Maximum age in seconds. The cookie expires after this duration. |
+| `expires` | `Date` | Absolute expiration date. Use `maxAge` instead when possible. |
+| `domain` | `string` | The domain the cookie is valid for. Defaults to the current domain. |
+
+## Server-Side Behavior
+
+On the server, `cookies` reads from the `Cookie` header of the current incoming request. The request context is provided via `AsyncLocalStorage`, so you can call `cookies.get()` anywhere in server code without manually passing the request object.
+
+```ts
+// app/lib/auth.server.ts
+import { cookies } from 'catmint/cookies'
+
+export async function getCurrentUser() {
+  const sessionId = cookies.get('session_id')
+  if (!sessionId) return null
+
+  return await db.users.findBySessionId(sessionId)
+}
+```
+
+## Client-Side Behavior
+
+On the client, `cookies` reads from and writes to `document.cookie`. Note that cookies marked as `httpOnly` are not accessible from client-side JavaScript -- this is a browser security feature.
+
+```tsx
+// app/components/theme-toggle.client.tsx
+import { cookies } from 'catmint/cookies'
+
+export function ThemeToggle() {
+  const toggle = () => {
+    const current = cookies.get('theme') || 'light'
+    const next = current === 'light' ? 'dark' : 'light'
+    cookies.set('theme', next, { path: '/', maxAge: 60 * 60 * 24 * 365 })
+    document.documentElement.setAttribute('data-theme', next)
+  }
+
+  return <button onClick={toggle}>Toggle theme</button>
+}
+```
+
+## Usage in Server Functions
+
+Server functions have full access to the cookie API. A common pattern is to set a session cookie after login:
+
+```ts
+// app/lib/auth.fn.ts
+import { createServerFn } from 'catmint/server'
+import { cookies } from 'catmint/cookies'
+
+export const login = createServerFn(
+  async ({ email, password }: { email: string; password: string }) => {
+    const user = await authenticate(email, password)
+    if (!user) {
+      return { error: 'Invalid credentials' }
+    }
+
+    const session = await createSession(user.id)
+
+    cookies.set('session_id', session.id, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 60 * 60 * 24 * 7,
+    })
+
+    return { user }
+  }
+)
+
+export const logout = createServerFn(async () => {
+  const sessionId = cookies.get('session_id')
+  if (sessionId) {
+    await destroySession(sessionId)
+  }
+  cookies.delete('session_id', { path: '/' })
+})
+```
+
+## Usage in Middleware
+
+```ts
+// app/middleware.ts
+import { cookies } from 'catmint/cookies'
+import { statusResponse } from 'catmint/server'
+
+export async function middleware(request: Request, next: () => Promise<Response>) {
+  const locale = cookies.get('locale') || 'en'
+
+  // Make locale available to downstream handlers
+  request.headers.set('x-locale', locale)
+
+  return next()
+}
+```
+
+## Serialization and Parsing
+
+Cookie values are always strings. If you need to store structured data, serialize it to JSON:
+
+```ts
+// Writing a JSON cookie
+const preferences = { theme: 'dark', fontSize: 16, sidebar: true }
+cookies.set('prefs', JSON.stringify(preferences), { path: '/' })
+
+// Reading a JSON cookie
+const raw = cookies.get('prefs')
+const prefs = raw ? JSON.parse(raw) : null
+```
+
+> Keep cookie values small. Browsers typically enforce a 4 KB limit per cookie. For larger data, consider using a server-side session store keyed by a session ID cookie.
+
+[Next: Headers →](/guides/headers)

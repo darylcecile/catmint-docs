@@ -1,0 +1,75 @@
+# adapter-vercel
+
+Vercel adapter for Catmint. Transforms Catmint build output into the [Vercel Build Output API v3](https://vercel.com/docs/build-output-api/v3) format for seamless deployment.
+
+## Import
+
+```ts
+import vercel from 'catmint-adapter-vercel'
+```
+
+## Signature
+
+```ts
+function vercelAdapter(options?: VercelAdapterOptions): CatmintAdapter
+```
+
+The default export is the `vercelAdapter` factory function.
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `options` | `VercelAdapterOptions` | No | Configuration for the Vercel deployment. |
+
+### `VercelAdapterOptions`
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `runtime` | `'nodejs' \| 'edge'` | `'nodejs'` | Runtime for serverless functions. |
+| `regions` | `string[]` | — | Vercel regions to deploy to (e.g. `['iad1', 'sfo1']`). |
+
+## Return Value
+
+Returns a `CatmintAdapter` object with `name: '@catmint/adapter-vercel'`. When the `adapt()` method is called during build, it:
+
+1. Generates `.vercel/output/config.json`
+2. Copies client assets and pre-rendered pages to `.vercel/output/static/`
+3. Generates a serverless function at `.vercel/output/functions/index.func/` (unless in `frontend`-only mode)
+4. Creates the `.vc-config.json` for the function with the specified runtime and regions
+
+### Edge Runtime
+
+When `runtime: 'edge'` is selected, the adapter validates that server functions do not reference Node.js-specific APIs (`fs`, `child_process`, `node:`, etc.) and logs warnings for potential incompatibilities.
+
+## Examples
+
+```ts
+// catmint.config.ts — default Node.js runtime
+import { defineConfig } from 'catmint/config'
+import vercel from 'catmint-adapter-vercel'
+
+export default defineConfig({
+  adapter: vercel(),
+})
+```
+
+```ts
+// Edge runtime with specific regions
+import { defineConfig } from 'catmint/config'
+import vercel from 'catmint-adapter-vercel'
+
+export default defineConfig({
+  adapter: vercel({
+    runtime: 'edge',
+    regions: ['iad1', 'sfo1'],
+  }),
+})
+```
+
+## See Also
+
+- [CatmintAdapter](/api/CatmintAdapter)
+- [adapter-node](/api/adapter-node)
+- [adapter-cloudflare](/api/adapter-cloudflare)
+- [defineConfig](/api/config)
