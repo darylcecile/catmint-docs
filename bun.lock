@@ -5,11 +5,11 @@
     "": {
       "name": "catmint-docs",
       "dependencies": {
-        "@catmint/adapter-vercel": "^0.0.0-prealpha.1",
-        "@catmint/cli": "0.0.0-prealpha.1",
-        "@catmint/vite": "0.0.0-prealpha.1",
+        "@catmint/adapter-vercel": "^0.0.0-prealpha.3",
+        "@catmint/cli": "0.0.0-prealpha.3",
+        "@catmint/vite": "0.0.0-prealpha.3",
         "@shikijs/rehype": "^3.22.0",
-        "catmint": "0.0.0-prealpha.1",
+        "catmint": "0.0.0-prealpha.3",
         "cmdk": "^1.1.1",
         "react": "^19.0.0",
         "react-dom": "^19.0.0",
@@ -27,11 +27,11 @@
     },
   },
   "packages": {
-    "@catmint/adapter-vercel": ["@catmint/adapter-vercel@0.0.0-prealpha.1", "", { "dependencies": { "catmint": "0.0.0-prealpha.1" } }, "sha512-vwZS8t8QStYgP5R9hu+0rzmx8cSbRq3BL4J2Z3Cu6oknI9ZdYO7onXNMpubl6/NYVuEMcrVbhZAt9OdujVmyQw=="],
+    "@catmint/adapter-vercel": ["@catmint/adapter-vercel@0.0.0-prealpha.3", "", { "dependencies": { "catmint": "0.0.0-prealpha.3" } }, "sha512-hTaMTQMY2aq7sVegat4mkUVg3VOqk5LuTnZ+kyDXn6CVkxtZlKCGi0VPfdyXlf4EsBU2h7XcTd3BMlhWK4skxQ=="],
 
-    "@catmint/cli": ["@catmint/cli@0.0.0-prealpha.1", "", { "dependencies": { "@catmint/vite": "0.0.0-prealpha.1", "catmint": "0.0.0-prealpha.1", "vite": "^6.0.0" }, "bin": { "catmint": "bin/catmint.js" } }, "sha512-DtlAW5TPmDaFVC8zpXWN8B9D4cTlCQSLPR9sYtr/5gTN+PpcplZ06p02ZvWUISNY5YuGFqXHJLDd7WzIqAR4RQ=="],
+    "@catmint/cli": ["@catmint/cli@0.0.0-prealpha.3", "", { "dependencies": { "@catmint/vite": "0.0.0-prealpha.3", "catmint": "0.0.0-prealpha.3", "vite": "^6.0.0" }, "bin": { "catmint": "bin/catmint.js" } }, "sha512-ygqsK0K+7J5hrX88PX1hg6/+SM2aH8j3KtnsfgRkv0TeOxMwTZHDJwGTm1RBLnu39CgfV+y3A3laiN+JN7/hDQ=="],
 
-    "@catmint/vite": ["@catmint/vite@0.0.0-prealpha.1", "", { "dependencies": { "@mdx-js/mdx": "^3.1.1", "@swc/core": "^1.15.11", "@vitejs/plugin-rsc": "^0.5.20", "estree-walker": "^3.0.3", "magic-string": "^0.30.21", "rsc-html-stream": "^0.0.7" }, "peerDependencies": { "vite": "^6.0.0" } }, "sha512-NHF7+CSa2BwXgI63kBRyWOceE04mPSB77VJGsXoo3gkhSPoN031p8VzL43BP/mMYwKy8czdGz8y/SI19eSXATQ=="],
+    "@catmint/vite": ["@catmint/vite@0.0.0-prealpha.3", "", { "dependencies": { "@mdx-js/mdx": "^3.1.1", "@swc/core": "^1.15.11", "@vitejs/plugin-rsc": "^0.5.20", "estree-walker": "^3.0.3", "magic-string": "^0.30.21", "rsc-html-stream": "^0.0.7" }, "peerDependencies": { "vite": "^6.0.0" } }, "sha512-g3g0BNHmBHkHfvIsGM+GCNYWE4lZZ2J+Xdfm5tsxgqcDxwqmXrK6xw6jcjjZ4UfkKYBvAFxyeRxvzeGb7eGPXg=="],
 
     "@esbuild/aix-ppc64": ["@esbuild/aix-ppc64@0.25.12", "", { "os": "aix", "cpu": "ppc64" }, "sha512-Hhmwd6CInZ3dwpuGTF8fJG6yoWmsToE+vYgD4nytZVxcu1ulHpUQRAB1UJ8+N1Am3Mz4+xOByoQoSZf4D+CpkA=="],
 
@@ -293,7 +293,7 @@
 
     "bail": ["bail@2.0.2", "", {}, "sha512-0xO6mYd7JB2YesxDKplafRpsiOzPt9V02ddPCLbY1xYGPOX24NTyN50qnUxgCPcSoYMhKpAuBTjQoRZCAkUDRw=="],
 
-    "catmint": ["catmint@0.0.0-prealpha.1", "", { "dependencies": { "@mdx-js/mdx": "^3.1.1", "@swc/core": "^1.15.11" }, "peerDependencies": { "react": "^19.0.0", "react-dom": "^19.0.0" } }, "sha512-B+dQTQibdqukw053vf8/h+KAjbNuZz9/2l5S0L07L/zbT7xfZsUoaxxQJ7xdiyq5DVZlpcVejB+YGrmmmNB6yg=="],
+    "catmint": ["catmint@0.0.0-prealpha.3", "", { "dependencies": { "@mdx-js/mdx": "^3.1.1", "@swc/core": "^1.15.11" }, "peerDependencies": { "react": "^19.0.0", "react-dom": "^19.0.0" } }, "sha512-oD4pRECUKn/VzVZ2kNK0xxcrlRNaH2DBc8KUn2VhwqLirsyAOlbBf4L44J4PJ4i7aT57ZlP26xTYFwI2ABCeWw=="],
 
     "ccount": ["ccount@2.0.1", "", {}, "sha512-eyrF0jiFpY+3drT6383f1qhkbGsLSifNAjA61IUjZjmLCWjItY6LB9ft9YhoDgwfmclB2zhu51Lc7+95b8NRAg=="],
 

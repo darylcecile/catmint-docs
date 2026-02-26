@@ -8,11 +8,11 @@
     "start": "catmint start"
   },
   "dependencies": {
-    "@catmint/adapter-vercel": "^0.0.0-prealpha.1",
-    "@catmint/cli": "0.0.0-prealpha.1",
-    "@catmint/vite": "0.0.0-prealpha.1",
+    "@catmint/adapter-vercel": "^0.0.0-prealpha.3",
+    "@catmint/cli": "0.0.0-prealpha.3",
+    "@catmint/vite": "0.0.0-prealpha.3",
     "@shikijs/rehype": "^3.22.0",
-    "catmint": "0.0.0-prealpha.1",
+    "catmint": "0.0.0-prealpha.3",
     "cmdk": "^1.1.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
