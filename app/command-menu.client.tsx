@@ -100,13 +100,13 @@ export function CommandMenu({ sections }: CommandMenuProps) {
 function getSectionIcon(section: string): string {
   switch (section) {
     case "Getting Started":
-      return "▶";
+      return "🏠";
     case "Guides":
-      return "◆";
+      return "🙌🏽";
     case "API Reference":
       return "⬡";
     case "Examples":
-      return "◇";
+      return "📙";
     case "Architecture Decisions":
       return "△";
     default:

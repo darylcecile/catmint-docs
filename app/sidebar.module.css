@@ -4,7 +4,7 @@
   width: 280px;
   background: #fff;
   border-right: 1px solid #e5e7eb;
-  padding: 24px 0;
+  padding: 12px 0;
   position: fixed;
   top: 0;
   left: 0;
@@ -14,18 +14,20 @@
 }
 
 .logo {
-  display: block;
-  padding: 0 24px 24px;
+  display: flex;
+  padding: 0 24px 12px;
   font-size: 24px;
   font-weight: 700;
-  color: #6c5ce7;
+  color: #62be52;
   text-decoration: none;
   border-bottom: 1px solid #e5e7eb;
   margin-bottom: 16px;
+  align-items: center;
+  gap: 4px;
 }
 
 .logo:hover {
-  color: #5a4bd1;
+  color: #3a9c3a;
 }
 
 .section {
@@ -51,6 +53,6 @@
 }
 
 .link:hover {
-  color: #6c5ce7;
-  background-color: #f3f0ff;
+  color: #3c8446;
+  background-color: #f0fff1;
 }

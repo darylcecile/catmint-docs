@@ -20,7 +20,14 @@ export default function DocsLayout({
         <div className="flex min-h-screen">
           <nav className={styles.sidebar}>
             <a href="/" className={styles.logo}>
-              Catmint
+				<span className="size-[1em] object-contain relative inline-block">
+				  <img
+						src="/catmint.png"
+						alt=""
+						className="absolute inset-0 w-full h-full"
+					/>
+				</span>
+            	Catmint
             </a>
             <CommandMenu sections={NAV_SECTIONS} />
             {NAV_SECTIONS.map((section) => (

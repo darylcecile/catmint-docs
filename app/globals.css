@@ -2,13 +2,13 @@
 @plugin "@tailwindcss/typography";
 
 @theme {
-  --color-brand-50: #f3f0ff;
-  --color-brand-100: #e9e3ff;
-  --color-brand-500: #6c5ce7;
-  --color-brand-600: #5a4bd1;
-  --color-brand-700: #4839b5;
+	--color-brand-50: #f0fdf4;
+	--color-brand-100: #dcfce7;
+	--color-brand-500: #22c55e;
+	--color-brand-600: #16a34a;
+	--color-brand-700: #15803d;
 
-  --font-mono: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+	--font-mono: "SF Mono", "Fira Code", "Cascadia Code", monospace;
 }
 
 @layer base {
@@ -88,7 +88,7 @@
 }
 
 .prose a {
-  color: #6c5ce7;
+  color: #4c8f4d;
   text-decoration: none;
 }
 
@@ -114,7 +114,7 @@
   padding: 8px 12px;
   font-size: 14px;
   color: #6b7280;
-  background: #f9fafb;
+  background: #f9fbf9;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   cursor: pointer;
@@ -124,7 +124,7 @@
 .search-trigger:hover {
   border-color: #d1d5db;
   color: #374151;
-  background: #f3f4f6;
+  background: #f3f6f3;
 }
 
 .search-trigger span {
@@ -241,12 +241,12 @@
 }
 
 [cmdk-item][data-selected="true"] {
-  background: #f3f0ff;
-  color: #6c5ce7;
+  background: #f0fff0;
+  color: #447851;
 }
 
 [cmdk-item]:active {
-  background: #e9e3ff;
+  background: #e4ffe3;
 }
 
 .cmdk-item-icon {
@@ -258,7 +258,7 @@
 }
 
 [cmdk-item][data-selected="true"] .cmdk-item-icon {
-  color: #6c5ce7;
+  color: #509a63;
 }
 
 .cmdk-item-content {
@@ -281,7 +281,7 @@
 }
 
 [cmdk-item][data-selected="true"] .cmdk-item-section {
-  color: #8b7ee6;
+  color: #509a63;
 }
 
 @keyframes cmdk-fade-in {
