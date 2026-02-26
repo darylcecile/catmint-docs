@@ -54,6 +54,7 @@ export interface RouteMap {
   '/examples/form': {}
   '/examples/generate-metadata': {}
   '/examples/loading-error': {}
+  '/examples/path/[val]': { val: string }
   '/examples/server-data': {}
   '/examples/server-fn': {}
   '/examples/static-route': {}
