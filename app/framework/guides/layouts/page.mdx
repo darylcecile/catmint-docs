@@ -97,15 +97,14 @@ Each layout wraps the next one in the chain. The innermost layout wraps the page
 
 ## Stopping Inheritance with inherit: false
 
-By default, a layout inherits all ancestor layouts above it. To stop the ancestor chain from being collected, export an `inherit` constant set to `false` from the layout file:
+By default, a layout inherits all ancestor layouts above it. To stop the ancestor chain from being collected, pass `{ inherit: false }` as the second argument to the `layout()` wrapper:
 
 ```tsx
 // app/auth/layout.tsx
 import React from 'react'
+import { layout } from 'catmint/layout'
 
-export const inherit = false
-
-export default function AuthLayout({
+export default layout(function AuthLayout({
   children,
 }: {
   children: React.ReactNode
@@ -122,7 +121,7 @@ export default function AuthLayout({
       </body>
     </html>
   )
-}
+}, { inherit: false })
 ```
 
 With `inherit: false`, pages inside `app/auth/` will only be wrapped by the `AuthLayout`. The root layout and any other ancestor layouts are not applied. This is useful for pages like login or onboarding that need a completely different shell.

@@ -35,7 +35,7 @@ interface ServerFnOptions<T = unknown> {
 
 | Field      | Type                                          | Default  | Description                                                                                                                                                                                           |
 | ---------- | --------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `method`   | `'GET' \| 'POST' \| 'PUT' \| 'DELETE'`        | `'POST'` | HTTP method for the auto-generated RPC endpoint.                                                                                                                                                      |
+| `method`   | `'GET' \| 'POST' \| 'PUT' \| 'DELETE'`        | `'GET'` | HTTP method for the auto-generated RPC endpoint.                                                                                                                                                      |
 | `validate` | `StandardSchemaV1 \| ((input: unknown) => T)` | —        | Input validation. Accepts any [Standard Schema](https://github.com/standard-schema/standard-schema) object (Zod, Valibot, ArkType, etc.) or a plain validation function that throws on invalid input. |
 
 ## Return Value

@@ -172,7 +172,7 @@ import { createServerFn, provideRouteData } from 'catmint/server'
 import { db } from '../lib/db.server'
 
 export const productsData = provideRouteData(
-  createServerFn().handler(async () => {
+  createServerFn(async () => {
     const products = await db.product.findMany()
     return { products }
   })

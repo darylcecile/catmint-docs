@@ -4,23 +4,22 @@ Server functions let you write server-side logic that can be called directly fro
 
 ## createServerFn
 
-The `createServerFn` function from `catmint/server` defines a server function using a chained builder API:
+The `createServerFn` function from `catmint/server` defines a server function by wrapping a handler with optional configuration:
 
 ```ts
 // app/lib/posts.fn.ts
 import { createServerFn } from 'catmint/server'
 import { db } from './db.server'
 
-export const getPosts = createServerFn()
-  .handler(async () => {
-    const posts = await db.post.findMany({
-      orderBy: { createdAt: 'desc' },
-    })
-    return posts
+export const getPosts = createServerFn(async () => {
+  const posts = await db.post.findMany({
+    orderBy: { createdAt: 'desc' },
   })
+  return posts
+})
 ```
 
-The `.handler()` method defines the function body. The handler runs exclusively on the server. You can safely use database clients, file system access, environment variables, and other server-only APIs inside it.
+The handler runs exclusively on the server. You can safely use database clients, file system access, environment variables, and other server-only APIs inside it.
 
 ### Calling from a Component
 
@@ -44,32 +43,31 @@ export default async function BlogPage() {
 }
 ```
 
-## Input with .input()
+## Typed Input
 
-Use the `.input()` method to provide type-safe arguments to your server function. The input is passed to the handler as its first argument:
+Server functions accept a typed input as the first argument to the handler. Pass the input when calling the function:
 
 ```ts
 // app/lib/posts.fn.ts
 import { createServerFn } from 'catmint/server'
 import { db } from './db.server'
 
-export const getPost = createServerFn()
-  .input<{ slug: string }>()
-  .handler(async ({ slug }) => {
-    const post = await db.post.findUnique({ where: { slug } })
-    if (!post) {
-      throw new Error('Post not found')
-    }
-    return post
-  })
+export const getPost = createServerFn(async (input: { slug: string }) => {
+  const post = await db.post.findUnique({ where: { slug: input.slug } })
+  if (!post) {
+    throw new Error('Post not found')
+  }
+  return post
+})
 
-export const createPost = createServerFn()
-  .input<{ title: string; body: string }>()
-  .handler(async ({ title, body }) => {
+export const createPost = createServerFn(
+  async (input: { title: string; body: string }) => {
     return db.post.create({
-      data: { title, body, slug: title.toLowerCase().replace(/\s+/g, '-') },
+      data: { title: input.title, body: input.body, slug: input.title.toLowerCase().replace(/\s+/g, '-') },
     })
-  })
+  },
+  { method: 'POST' },
+)
 ```
 
 ```ts
@@ -78,9 +76,9 @@ const post = await getPost({ slug: 'hello-world' })
 await createPost({ title: 'New Post', body: 'Content here' })
 ```
 
-## Validation with .validator()
+## Validation
 
-The `.validator()` method adds runtime validation to the input. It runs before the handler and rejects invalid data with a 400 status code. Use any validation library or write custom logic:
+The `validate` option adds runtime validation to the input. It runs before the handler and rejects invalid data. You can pass any [Standard Schema](https://github.com/standard-schema/standard-schema) object (Zod, Valibot, ArkType, etc.) or a plain validation function that throws on invalid input:
 
 ```ts
 // app/lib/posts.fn.ts
@@ -94,34 +92,36 @@ const CreatePostSchema = z.object({
   tags: z.array(z.string()).optional(),
 })
 
-export const createPost = createServerFn()
-  .input<z.infer<typeof CreatePostSchema>>()
-  .validator((data) => CreatePostSchema.parse(data))
-  .handler(async ({ title, body, tags }) => {
+export const createPost = createServerFn(
+  async (input: z.infer<typeof CreatePostSchema>) => {
     return db.post.create({
-      data: { title, body, tags },
+      data: { title: input.title, body: input.body, tags: input.tags },
     })
-  })
+  },
+  {
+    method: 'POST',
+    validate: CreatePostSchema,
+  },
+)
 ```
 
-The validator function receives the raw input and should return the validated data (or throw an error). The validated output is passed to the handler.
+The validator receives the raw input and should return the validated data (or throw an error). The validated output is passed to the handler.
 
-## Method Chaining Order
+## Options
 
-The builder methods must be chained in a specific order:
+The second argument to `createServerFn` is an optional configuration object:
 
 ```ts
-createServerFn()
-  .input<InputType>()        // 1. Define input type (optional)
-  .validator(validateFn)     // 2. Add validation (optional, requires .input())
-  .handler(handlerFn)        // 3. Define the handler (required)
+createServerFn(handler, {
+  method: 'POST',       // HTTP method (default: 'GET')
+  validate: schema,     // Standard Schema or validation function
+})
 ```
 
-| Method | Required | Description |
+| Field | Required | Description |
 | --- | --- | --- |
-| `.input<T>()` | No | Declares the TypeScript type for the function's input |
-| `.validator(fn)` | No | Adds runtime validation before the handler executes |
-| `.handler(fn)` | Yes | The server-side function body |
+| `method` | No | HTTP method for the auto-generated RPC endpoint (`'GET'`, `'POST'`, `'PUT'`, `'DELETE'`). Default: `'GET'` |
+| `validate` | No | Input validation. Accepts a Standard Schema object or a plain function that throws on invalid input |
 
 ## Client-Side Compilation
 
@@ -157,18 +157,19 @@ Use `createIsomorphicFn` from `catmint/server` when you need different implement
 // app/lib/analytics.ts
 import { createIsomorphicFn } from 'catmint/server'
 
-export const trackEvent = createIsomorphicFn()
-  .server((event: string, data: Record<string, unknown>) => {
+export const trackEvent = createIsomorphicFn({
+  server: (event: string, data: Record<string, unknown>) => {
     // Server: write to database
     console.log('Server tracking:', event, data)
-  })
-  .client((event: string, data: Record<string, unknown>) => {
+  },
+  client: (event: string, data: Record<string, unknown>) => {
     // Client: send to analytics service
     window.analytics?.track(event, data)
-  })
+  },
+})
 ```
 
-The `.server()` handler is stripped from the client bundle, and the `.client()` handler is stripped from the server bundle. Both must have the same function signature.
+The `server` handler is stripped from the client bundle, and the `client` handler is stripped from the server bundle. Both must have the same function signature.
 
 ## Route Data Bridge: provideRouteData and useRouteData
 
@@ -181,7 +182,7 @@ import { provideRouteData } from 'catmint/server'
 import { db } from '../lib/db.server'
 
 export const blogData = provideRouteData(
-  createServerFn().handler(async () => {
+  createServerFn(async () => {
     const posts = await db.post.findMany({
       orderBy: { createdAt: 'desc' },
       take: 10,
@@ -220,16 +221,17 @@ Errors thrown inside a server function handler are serialized and sent back to t
 
 ```ts
 // app/lib/posts.fn.ts
-export const deletePost = createServerFn()
-  .input<{ id: string }>()
-  .handler(async ({ id }) => {
-    const post = await db.post.findUnique({ where: { id } })
+export const deletePost = createServerFn(
+  async (input: { id: string }) => {
+    const post = await db.post.findUnique({ where: { id: input.id } })
     if (!post) {
       throw new Error('Post not found')
     }
-    await db.post.delete({ where: { id } })
+    await db.post.delete({ where: { id: input.id } })
     return { success: true }
-  })
+  },
+  { method: 'DELETE' },
+)
 
 // Client usage with error handling
 try {
