@@ -133,13 +133,11 @@ Composed middleware functions execute in the order they are passed to `composeMi
 
 ## Stopping Inheritance with inherit: false
 
-By default, middleware is inherited by all child routes. A middleware at `app/middleware.ts` runs for every route in the application. To stop ancestor middleware from applying, export `inherit` as `false`:
+By default, middleware is inherited by all child routes. A middleware at `app/middleware.ts` runs for every route in the application. To stop ancestor middleware from applying, pass `{ inherit: false }` as the second argument to the `middleware()` wrapper:
 
 ```ts
 // app/webhooks/middleware.ts
 import { middleware } from 'catmint/middleware'
-
-export const inherit = false
 
 export default middleware(async (request, next) => {
   // This is the only middleware that runs for /webhooks/* routes.
@@ -150,7 +148,7 @@ export default middleware(async (request, next) => {
   }
 
   return next()
-})
+}, { inherit: false })
 ```
 
 > The `inherit: false` boundary affects both middleware and layout inheritance. If you need to break only one, consider restructuring with route groups instead.

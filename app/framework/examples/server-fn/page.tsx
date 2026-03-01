@@ -50,7 +50,7 @@ export default async function ServerFnPage() {
             Input validation is supported via Standard Schema (Zod, Valibot,
             etc.) or plain functions
           </li>
-          <li>Methods: GET, POST, PUT, DELETE (default: POST)</li>
+          <li>Methods: GET, POST, PUT, DELETE (default: GET)</li>
         </ul>
       </div>
     </div>
