@@ -1,10 +1,10 @@
 # Caching
 
-Catmint provides built-in caching primitives for route-level response caching, build-time pre-rendering, and programmatic cache invalidation. This guide covers `cachedRoute`, `staticRoute`, `invalidateCache`, the CacheStore interface, and CDN integration via cache headers.
+Catmint provides built-in caching primitives for route-level response caching, build-time pre-rendering, and programmatic cache invalidation. This guide covers `cachedRoute`, `staticRoute`, `invalidateCache`, and CDN integration via cache headers.
 
 ## Route-Level Caching with cachedRoute
 
-Use `cachedRoute()` from `catmint/cache` to cache the response of a route handler for a specified duration. The first argument is the TTL (time-to-live) in seconds, and the second is the handler function:
+Use `cachedRoute()` from `catmint/cache` to cache the response of a route handler for a specified duration. The first argument is the handler function, and the second is an optional `CacheOptions` object:
 
 ```ts
 // app/api/posts/endpoint.ts
@@ -12,29 +12,29 @@ import { cachedRoute } from 'catmint/cache'
 import { db } from '../../lib/db.server'
 
 // Cache the response for 60 seconds
-export const GET = cachedRoute(60, async (request) => {
+export const GET = cachedRoute(async (request) => {
   const posts = await db.post.findMany({
     orderBy: { createdAt: 'desc' },
     take: 20,
   })
 
   return Response.json(posts)
-})
+}, { revalidate: 60 })
 ```
 
 When a cached response exists and has not expired, the handler is skipped entirely and the cached response is returned. After the TTL elapses, the next request triggers the handler again and refreshes the cache.
 
 ### Caching with Dynamic Keys
 
-By default, the cache key is derived from the request URL (including query parameters). Different URLs produce different cache entries:
+Cache keys are generated from the handler name and its serialized arguments. Handlers called with different arguments produce different cache entries:
 
 ```ts
 // app/api/posts/[slug]/endpoint.ts
 import { cachedRoute } from 'catmint/cache'
 import { db } from '../../../lib/db.server'
 
-// Each unique slug gets its own cache entry
-export const GET = cachedRoute(300, async (request, { params }) => {
+// Each unique set of arguments gets its own cache entry
+export const GET = cachedRoute(async (request, { params }) => {
   const post = await db.post.findUnique({
     where: { slug: params.slug },
   })
@@ -44,7 +44,7 @@ export const GET = cachedRoute(300, async (request, { params }) => {
   }
 
   return Response.json(post)
-})
+}, { revalidate: 300 })
 ```
 
 ## Build-Time Pre-Rendering with staticRoute
@@ -70,7 +70,7 @@ Static routes are ideal for content that does not change between deployments: co
 
 ## Cache Invalidation with invalidateCache
 
-Use `invalidateCache()` from `catmint/cache` to programmatically clear cached responses. It accepts a glob-style pattern to match cache keys:
+Use `invalidateCache()` from `catmint/cache` to programmatically clear cached responses. Pass either a `tag` or a `route` to target specific entries:
 
 ```ts
 // app/api/posts/endpoint.ts
@@ -84,86 +84,24 @@ export async function POST(request: Request) {
     data: body,
   })
 
-  // Invalidate all cached post routes
-  await invalidateCache('/api/posts*')
+  // Invalidate all entries tagged 'posts'
+  await invalidateCache({ tag: 'posts' })
 
   return Response.json(post, { status: 201 })
 }
 ```
 
-The pattern matching follows glob syntax:
+You can also invalidate by route pattern:
 
-| Pattern | Matches |
+```ts
+// Invalidate all cached entries for a specific route
+await invalidateCache({ route: '/blog/[slug]' })
+```
+
+| Option | Description |
 | --- | --- |
-| `"/api/posts"` | Exact match only |
-| `"/api/posts*"` | All routes starting with /api/posts |
-| `"*"` | All cached entries (full cache clear) |
-
-## The CacheStore Interface
-
-Catmint uses an in-memory cache store by default. For production deployments, you can provide a custom cache store that implements the `CacheStore` interface:
-
-```ts
-interface CacheStore {
-  get(key: string): Promise<CachedResponse | null>
-  set(key: string, value: CachedResponse, ttl: number): Promise<void>
-  delete(key: string): Promise<void>
-  clear(pattern?: string): Promise<void>
-}
-
-interface CachedResponse {
-  body: string
-  status: number
-  headers: Record<string, string>
-}
-```
-
-### Custom Cache Store Example
-
-```ts
-// app/lib/redis-cache.server.ts
-import type { CacheStore, CachedResponse } from 'catmint/cache'
-import { Redis } from 'ioredis'
-
-const redis = new Redis(process.env.REDIS_URL)
-
-export const redisCacheStore: CacheStore = {
-  async get(key) {
-    const data = await redis.get(`cache:${key}`)
-    return data ? JSON.parse(data) : null
-  },
-
-  async set(key, value, ttl) {
-    await redis.setex(`cache:${key}`, ttl, JSON.stringify(value))
-  },
-
-  async delete(key) {
-    await redis.del(`cache:${key}`)
-  },
-
-  async clear(pattern = '*') {
-    const keys = await redis.keys(`cache:${pattern}`)
-    if (keys.length > 0) {
-      await redis.del(...keys)
-    }
-  },
-}
-```
-
-### Registering a Custom Store
-
-```ts
-// catmint.config.ts
-import { defineConfig } from 'catmint/config'
-import { redisCacheStore } from './app/lib/redis-cache.server'
-
-export default defineConfig({
-  mode: 'fullstack',
-  cache: {
-    store: redisCacheStore,
-  },
-})
-```
+| `tag` | Invalidate all entries carrying this tag |
+| `route` | Invalidate all entries associated with this route pattern |
 
 ## Cache Headers for CDN Integration
 
@@ -201,7 +139,7 @@ You can use `cachedRoute` for server-side caching and set `Cache-Control` header
 import { cachedRoute } from 'catmint/cache'
 import { db } from '../../lib/db.server'
 
-export const GET = cachedRoute(120, async () => {
+export const GET = cachedRoute(async () => {
   const items = await db.feedItem.findMany({ take: 50 })
 
   return new Response(JSON.stringify(items), {
@@ -213,7 +151,7 @@ export const GET = cachedRoute(120, async () => {
       'Cache-Control': 'public, max-age=60, s-maxage=300',
     },
   })
-})
+}, { revalidate: 120 })
 ```
 
 ## Next Steps
