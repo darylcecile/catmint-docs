@@ -57,4 +57,20 @@
   background-color: #f0fff1;
 }
 
+/* ── Mobile: hide the logo inside sidebar (topbar has its own) ───── */
+@media (max-width: 767px) {
+  .logo {
+    display: none;
+  }
 
+  .sidebar {
+    /* Reset fixed positioning — the wrapper controls position on mobile */
+    position: static;
+    width: 100%;
+    height: 100%;
+    border-right: none;
+    top: auto;
+    left: auto;
+    bottom: auto;
+  }
+}

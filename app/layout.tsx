@@ -4,6 +4,7 @@ import "./globals.css";
 import { NAV_PACKAGES } from "./nav-data";
 import { CommandMenu } from "./command-menu.client";
 import { PackageSidebar } from "./package-sidebar.client";
+import { MobileNav } from "./mobile-nav.client";
 
 export default function DocsLayout({
   children,
@@ -19,23 +20,25 @@ export default function DocsLayout({
       </head>
       <body>
         <div className="flex min-h-screen">
-          <nav className={styles.sidebar}>
-            <a href="/" className={styles.logo}>
-              <span className="size-[1em] object-contain relative inline-block">
-                <img
-                  src="/catmint.png"
-                  alt=""
-                  className="absolute inset-0 w-full h-full"
-                />
-              </span>
-              Catmint
-            </a>
-			<div className="loc">
-				<CommandMenu packages={NAV_PACKAGES} />
-				<PackageSidebar packages={NAV_PACKAGES} />
-			</div>
-          </nav>
-          <main className="ml-[280px] flex-1 px-16 py-12 max-w-[900px]">
+          <MobileNav>
+            <div className={styles.sidebar}>
+              <a href="/" className={styles.logo}>
+                <span className="size-[1em] object-contain relative inline-block">
+                  <img
+                    src="/catmint.png"
+                    alt=""
+                    className="absolute inset-0 w-full h-full"
+                  />
+                </span>
+                Catmint
+              </a>
+              <div className="loc">
+                <CommandMenu packages={NAV_PACKAGES} />
+                <PackageSidebar packages={NAV_PACKAGES} />
+              </div>
+            </div>
+          </MobileNav>
+          <main className="docs-main">
             <article className="prose prose-gray lg:prose-lg">
               {children}
             </article>
