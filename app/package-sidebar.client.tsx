@@ -49,9 +49,9 @@ export function PackageSidebar({ packages }: PackageSidebarProps) {
 
   return (
     <>
-      <div className={styles.packageSwitcher}>
-        <Select value={activePackageId} onValueChange={handlePackageChange}>
-          <SelectTrigger aria-label="Select package">
+      <div className="packageSwitcher">
+        <Select value={activePackageId} onValueChange={setActivePackageId}>
+          <SelectTrigger aria-label="Select package" className="h-10 rounded-lg!">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
