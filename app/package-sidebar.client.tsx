@@ -50,7 +50,7 @@ export function PackageSidebar({ packages }: PackageSidebarProps) {
   return (
     <>
       <div className="packageSwitcher">
-        <Select value={activePackageId} onValueChange={setActivePackageId}>
+        <Select value={activePackageId} onValueChange={handlePackageChange}>
           <SelectTrigger aria-label="Select package" className="h-10 rounded-lg!">
             <SelectValue />
           </SelectTrigger>
