@@ -43,7 +43,7 @@ pnpm init
 
 ```bash
 pnpm add catmint react react-dom
-pnpm add -D catmint-vite catmint-cli typescript @types/react @types/react-dom
+pnpm add -D @catmint/vite @catmint/cli typescript @types/react @types/react-dom
 ```
 
 ### 3. Create the config file
@@ -114,12 +114,12 @@ pnpm dev
 
 Catmint can be added to an existing React or Vite project. Install the same dependencies listed above, create a `catmint.config.ts`, and move your entry point into the `app/` directory.
 
-If you already have a Vite config, note that Catmint provides its own Vite plugin via the `catmint-vite` package. Add it to your `vite.config.ts`:
+If you already have a Vite config, note that Catmint provides its own Vite plugin via the `@catmint/vite` package. Add it to your `vite.config.ts`:
 
 ```ts
 // vite.config.ts
 import { defineConfig } from 'vite'
-import catmint from 'catmint-vite'
+import catmint from '@catmint/vite'
 
 export default defineConfig({
   plugins: [catmint()],
@@ -132,16 +132,16 @@ To deploy your application, install the adapter for your target platform:
 
 | Platform | Package | Install Command |
 | --- | --- | --- |
-| Node.js | `catmint-adapter-node` | `pnpm add -D catmint-adapter-node` |
-| Vercel | `catmint-adapter-vercel` | `pnpm add -D catmint-adapter-vercel` |
-| Cloudflare Workers | `catmint-adapter-cloudflare` | `pnpm add -D catmint-adapter-cloudflare` |
+| Node.js | `@catmint/adapter-node` | `pnpm add -D @catmint/adapter-node` |
+| Vercel | `@catmint/adapter-vercel` | `pnpm add -D @catmint/adapter-vercel` |
+| Cloudflare Workers | `@catmint/adapter-cloudflare` | `pnpm add -D @catmint/adapter-cloudflare` |
 
 Then reference the adapter in your config:
 
 ```ts
 // catmint.config.ts
 import { defineConfig } from 'catmint/config'
-import node from 'catmint-adapter-node'
+import node from '@catmint/adapter-node'
 
 export default defineConfig({
   mode: 'fullstack',

@@ -5,7 +5,7 @@ Vercel adapter for Catmint. Transforms Catmint build output into the [Vercel Bui
 ## Import
 
 ```ts
-import vercel from 'catmint-adapter-vercel'
+import vercel from '@catmint/adapter-vercel'
 ```
 
 ## Signature
@@ -47,7 +47,7 @@ When `runtime: 'edge'` is selected, the adapter validates that server functions 
 ```ts
 // catmint.config.ts — default Node.js runtime
 import { defineConfig } from 'catmint/config'
-import vercel from 'catmint-adapter-vercel'
+import vercel from '@catmint/adapter-vercel'
 
 export default defineConfig({
   adapter: vercel(),
@@ -57,7 +57,7 @@ export default defineConfig({
 ```ts
 // Edge runtime with specific regions
 import { defineConfig } from 'catmint/config'
-import vercel from 'catmint-adapter-vercel'
+import vercel from '@catmint/adapter-vercel'
 
 export default defineConfig({
   adapter: vercel({

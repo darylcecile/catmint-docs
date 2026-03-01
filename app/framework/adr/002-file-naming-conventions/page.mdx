@@ -16,7 +16,7 @@ Without clear conventions, developers would need explicit configuration or manua
 
 ## Decision
 
-File names in the `app/` directory encode semantic meaning through specific patterns. The `catmint-vite` plugin uses these patterns to determine behavior at compile time.
+File names in the `app/` directory encode semantic meaning through specific patterns. The `@catmint/vite` plugin uses these patterns to determine behavior at compile time.
 
 ### Reserved file names
 
@@ -46,7 +46,7 @@ File names in the `app/` directory encode semantic meaning through specific patt
 
 ## Rationale
 
-- **Compile-time enforcement.** By encoding boundary information in file names, the `catmint-vite` plugin can statically analyze the module graph and enforce safety rules without runtime checks. Importing a `*.server.ts` module from a `*.client.tsx` file is a build error, not a runtime surprise.
+- **Compile-time enforcement.** By encoding boundary information in file names, the `@catmint/vite` plugin can statically analyze the module graph and enforce safety rules without runtime checks. Importing a `*.server.ts` module from a `*.client.tsx` file is a build error, not a runtime surprise.
 - **Automatic directive injection.** Developers never need to manually write `"use client"` — naming a file `*.client.tsx` or `error.tsx` is sufficient. This eliminates a common source of bugs where forgetting the directive causes server code to leak into the client bundle.
 - **Server function compilation.** The `*.fn.ts` convention gives the build tool a clear signal to apply the server function transform — replacing function bodies with `fetch()` stubs in the client bundle and generating API endpoints on the server.
 - **Discoverability.** A developer can look at any file in the `app/` directory and immediately understand its role and execution context from the name alone, without reading the file contents.
@@ -75,7 +75,7 @@ app/dashboard/
 - Boundary violations are caught at build time with clear error messages.
 - No manual `"use client"` boilerplate — the convention handles it.
 - The file tree is self-documenting. New team members can understand the project structure without reading documentation.
-- The `catmint-vite` plugin can apply targeted transforms based on file patterns, keeping the compilation pipeline efficient.
+- The `@catmint/vite` plugin can apply targeted transforms based on file patterns, keeping the compilation pipeline efficient.
 
 **Negative:**
 

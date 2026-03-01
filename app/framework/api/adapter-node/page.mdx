@@ -5,7 +5,7 @@ Node.js adapter for Catmint. Produces a standalone Node.js server from the Catmi
 ## Import
 
 ```ts
-import node from 'catmint-adapter-node'
+import node from '@catmint/adapter-node'
 ```
 
 ## Signature
@@ -41,7 +41,7 @@ Returns a `CatmintAdapter` object with `name: '@catmint/adapter-node'`. When the
 ```ts
 // catmint.config.ts
 import { defineConfig } from 'catmint/config'
-import node from 'catmint-adapter-node'
+import node from '@catmint/adapter-node'
 
 export default defineConfig({
   adapter: node(),
@@ -51,7 +51,7 @@ export default defineConfig({
 ```ts
 // With custom port and host
 import { defineConfig } from 'catmint/config'
-import node from 'catmint-adapter-node'
+import node from '@catmint/adapter-node'
 
 export default defineConfig({
   adapter: node({

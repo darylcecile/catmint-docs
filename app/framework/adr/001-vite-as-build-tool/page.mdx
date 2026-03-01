@@ -19,7 +19,7 @@ The framework needs a build tool that is fast in development, reliable in produc
 
 ## Decision
 
-Catmint uses **Vite 6+** as its build tool and development server. All build pipeline functionality — route resolution, server bundling, and client bundling — runs through Vite. Framework-specific transforms are implemented as a dedicated Vite plugin (`catmint-vite`).
+Catmint uses **Vite 6+** as its build tool and development server. All build pipeline functionality — route resolution, server bundling, and client bundling — runs through Vite. Framework-specific transforms are implemented as a dedicated Vite plugin (`@catmint/vite`).
 
 The architecture is structured as:
 
@@ -33,7 +33,7 @@ The architecture is structured as:
 └─────────────────────────────────────────────────┘
 ```
 
-The `catmint-vite` plugin handles:
+The `@catmint/vite` plugin handles:
 
 - File-name convention enforcement (`.server.tsx`, `.client.tsx`, `.fn.ts`)
 - Automatic `"use client"` directive injection for `*.client.tsx` and `error.tsx` files
@@ -47,7 +47,7 @@ The `catmint-vite` plugin handles:
 - **Fast HMR.** Vite's hot module replacement operates at the module level, updating only changed files. This is critical for a framework that encourages colocated server and client components.
 - **Rollup-based production builds.** Vite uses Rollup under the hood for production, providing mature code splitting, tree shaking, and chunk optimization. This produces efficient server and client bundles.
 - **First-class SSR support.** Vite has built-in SSR capabilities including `ssrLoadModule`, separate server/client build pipelines, and module externalization — all of which Catmint's RSC streaming relies on.
-- **Plugin ecosystem.** Vite's plugin API (compatible with Rollup plugins) allows Catmint to implement framework transforms as a standard plugin (`catmint-vite`) rather than forking or wrapping the build tool. Developers can also layer on community Vite plugins for features like image optimization, PWA support, and CSS preprocessing.
+- **Plugin ecosystem.** Vite's plugin API (compatible with Rollup plugins) allows Catmint to implement framework transforms as a standard plugin (`@catmint/vite`) rather than forking or wrapping the build tool. Developers can also layer on community Vite plugins for features like image optimization, PWA support, and CSS preprocessing.
 - **Environment variable conventions.** Vite's `import.meta.env` pattern aligns with Catmint's `CATMINT_PUBLIC_*` prefix convention for client-safe environment variables.
 
 ## Alternatives Considered
@@ -62,12 +62,12 @@ The `catmint-vite` plugin handles:
 **Positive:**
 
 - Developers get near-instant dev server startup and fast HMR out of the box.
-- The `catmint-vite` plugin architecture keeps framework transforms modular and testable.
+- The `@catmint/vite` plugin architecture keeps framework transforms modular and testable.
 - Existing Vite community plugins (e.g., for SVG, MDX, Tailwind) work with Catmint projects without additional configuration.
 - Production builds benefit from Rollup's mature optimization pipeline.
 
 **Negative:**
 
-- Catmint is coupled to the Vite ecosystem. Major Vite breaking changes require corresponding updates to `catmint-vite`.
+- Catmint is coupled to the Vite ecosystem. Major Vite breaking changes require corresponding updates to `@catmint/vite`.
 - Developers must understand Vite configuration to debug advanced build issues.
 - Some Vite limitations (e.g., CommonJS module handling edge cases) are inherited by Catmint.

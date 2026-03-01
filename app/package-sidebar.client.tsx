@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { useNavigation } from "catmint/hooks";
 import type { NavPackage } from "./nav-data";
 import {
   Select,
@@ -14,6 +15,8 @@ interface PackageSidebarProps {
 }
 
 export function PackageSidebar({ packages }: PackageSidebarProps) {
+  const { navigate } = useNavigation();
+
   const [activePackageId, setActivePackageId] = useState<string>(() => {
     if (typeof window !== "undefined") {
       return detectPackageFromPath(window.location.pathname, packages);
@@ -29,13 +32,26 @@ export function PackageSidebar({ packages }: PackageSidebarProps) {
     setActivePackageId(detected);
   }, [packages]);
 
+  const handlePackageChange = useCallback(
+    (packageId: string) => {
+      setActivePackageId(packageId);
+      const pkg = packages.find((p) => p.id === packageId);
+      if (pkg) {
+        // Navigate to the first link in the package's nav
+        const firstLink = pkg.sections[0]?.links[0]?.href;
+        navigate(firstLink ?? pkg.basePath);
+      }
+    },
+    [packages, navigate],
+  );
+
   const activePackage = packages.find((p) => p.id === activePackageId);
 
   return (
     <>
-      <div className="packageSwitcher">
-        <Select value={activePackageId} onValueChange={setActivePackageId}>
-          <SelectTrigger aria-label="Select package" className="h-10 rounded-lg!">
+      <div className={styles.packageSwitcher}>
+        <Select value={activePackageId} onValueChange={handlePackageChange}>
+          <SelectTrigger aria-label="Select package">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

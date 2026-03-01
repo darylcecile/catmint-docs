@@ -5,7 +5,7 @@ Cloudflare Workers adapter for Catmint. Transforms Catmint build output into a C
 ## Import
 
 ```ts
-import cloudflare from 'catmint-adapter-cloudflare'
+import cloudflare from '@catmint/adapter-cloudflare'
 ```
 
 ## Signature
@@ -46,7 +46,7 @@ Output is written to `dist/cloudflare/`.
 ```ts
 // catmint.config.ts — defaults
 import { defineConfig } from 'catmint/config'
-import cloudflare from 'catmint-adapter-cloudflare'
+import cloudflare from '@catmint/adapter-cloudflare'
 
 export default defineConfig({
   adapter: cloudflare(),
@@ -56,7 +56,7 @@ export default defineConfig({
 ```ts
 // With custom compatibility date and routes
 import { defineConfig } from 'catmint/config'
-import cloudflare from 'catmint-adapter-cloudflare'
+import cloudflare from '@catmint/adapter-cloudflare'
 
 export default defineConfig({
   adapter: cloudflare({
