@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Command } from "cmdk";
 import { useNavigation } from "catmint/hooks";
 import type { NavPackage } from "./nav-data";
+import styles from './sidebar.module.css';
 
 interface CommandMenuProps {
   packages: NavPackage[];
@@ -32,10 +33,10 @@ export function CommandMenu({ packages }: CommandMenuProps) {
   );
 
   return (
-    <>
+    <div className="search-root">
       <button
         type="button"
-        className="search-trigger"
+        className="search-trigger rounded-lg"
         onClick={() => setOpen(true)}
       >
         <svg
@@ -128,7 +129,7 @@ export function CommandMenu({ packages }: CommandMenuProps) {
           )}
         </Command.List>
       </Command.Dialog>
-    </>
+    </div>
   );
 }
 

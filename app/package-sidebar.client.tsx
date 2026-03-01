@@ -1,5 +1,12 @@
 import { useState, useEffect } from "react";
 import type { NavPackage } from "./nav-data";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "./select.client";
 import styles from "./sidebar.module.css";
 
 interface PackageSidebarProps {
@@ -26,18 +33,19 @@ export function PackageSidebar({ packages }: PackageSidebarProps) {
 
   return (
     <>
-      <div className={styles.packageSwitcher}>
-        <select
-          value={activePackageId}
-          onChange={(e) => setActivePackageId(e.target.value)}
-          className={styles.packageSelect}
-        >
-          {packages.map((pkg) => (
-            <option key={pkg.id} value={pkg.id}>
-              {pkg.label}
-            </option>
-          ))}
-        </select>
+      <div className="packageSwitcher">
+        <Select value={activePackageId} onValueChange={setActivePackageId}>
+          <SelectTrigger aria-label="Select package" className="h-10 rounded-lg!">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {packages.map((pkg) => (
+              <SelectItem key={pkg.id} value={pkg.id}>
+                {pkg.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {activePackage?.sections.map((section) => (
@@ -53,6 +61,7 @@ export function PackageSidebar({ packages }: PackageSidebarProps) {
     </>
   );
 }
+
 
 function detectPackageFromPath(
   pathname: string,

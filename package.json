@@ -11,6 +11,7 @@
     "@catmint/adapter-vercel": "^0.0.0-prealpha.4",
     "@catmint/cli": "0.0.0-prealpha.4",
     "@catmint/vite": "0.0.0-prealpha.4",
+    "@radix-ui/react-select": "^2.2.6",
     "@shikijs/rehype": "^3.22.0",
     "catmint": "0.0.0-prealpha.4",
     "cmdk": "^1.1.1",

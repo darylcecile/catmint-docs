@@ -30,8 +30,10 @@ export default function DocsLayout({
               </span>
               Catmint
             </a>
-            <CommandMenu packages={NAV_PACKAGES} />
-            <PackageSidebar packages={NAV_PACKAGES} />
+			<div className="loc">
+				<CommandMenu packages={NAV_PACKAGES} />
+				<PackageSidebar packages={NAV_PACKAGES} />
+			</div>
           </nav>
           <main className="ml-[280px] flex-1 px-16 py-12 max-w-[900px]">
             <article className="prose prose-gray lg:prose-lg">
