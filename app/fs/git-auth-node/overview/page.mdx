@@ -1,0 +1,79 @@
+# @catmint-fs/git-auth-node
+
+Node.js credential helper integration for [@catmint-fs/git](/fs/git/overview). Bridges the gap between `@catmint-fs/git`'s HTTP transport and the system's native credential storage by shelling out to `git credential`.
+
+## How It Works
+
+When you clone or fetch from a private repository, the remote server requires authentication. `@catmint-fs/git` supports pluggable authentication callbacks, but managing credentials manually is tedious and insecure.
+
+`@catmint-fs/git-auth-node` delegates credential management to the same infrastructure that the `git` CLI uses:
+
+1. **Lookup** -- Calls `git credential fill` to retrieve stored credentials for a URL.
+2. **Store** -- Calls `git credential approve` after a successful authentication to save credentials for future use.
+3. **Reject** -- Calls `git credential reject` when credentials are invalid, so the helper can remove them.
+
+This means your Git operations automatically use whatever credential helper the user has configured -- macOS Keychain, Windows Credential Manager, Linux libsecret, a credential cache, or a `.netrc` file.
+
+## Supported Credential Helpers
+
+| Platform | Common Helpers                                    |
+| -------- | ------------------------------------------------- |
+| macOS    | `osxkeychain` (Keychain Access)                   |
+| Windows  | `wincred` (Credential Manager), `manager-core` (GCM) |
+| Linux    | `libsecret`, `store` (plaintext), `cache` (in-memory TTL) |
+
+The package does not implement any credential storage itself. It relies on `git` being installed and configured with a credential helper.
+
+## Requirements
+
+- **Node.js 18** or later
+- **git** available on `PATH`
+- A configured credential helper (e.g., `git config --global credential.helper osxkeychain`)
+
+## Two Usage Patterns
+
+### Callback-Based
+
+Provide `onAuth` and `onAuthFailure` callbacks to `@catmint-fs/git` operations. This gives you control over when credentials are requested and what happens on failure:
+
+```typescript
+import { createNodeAuthCallbacks } from "@catmint-fs/git-auth-node";
+import { clone } from "@catmint-fs/git";
+
+const { onAuth, onAuthFailure } = createNodeAuthCallbacks();
+
+await clone({
+  fs,
+  url: "https://github.com/private/repo.git",
+  dir: "/repo",
+  onAuth,
+  onAuthFailure,
+});
+```
+
+### Pre-Authenticated Transport
+
+Create an HTTP transport that has credentials baked in. This is simpler when you just want authentication to work without managing callbacks:
+
+```typescript
+import { createAuthenticatedTransport } from "@catmint-fs/git-auth-node";
+import { clone } from "@catmint-fs/git";
+
+const http = await createAuthenticatedTransport(
+  "https://github.com/private/repo.git"
+);
+
+await clone({
+  fs,
+  url: "https://github.com/private/repo.git",
+  dir: "/repo",
+  http,
+});
+```
+
+## Quick Links
+
+- [Installation](/fs/git-auth-node/installation)
+- [createNodeAuthCallbacks API](/fs/git-auth-node/api/createNodeAuthCallbacks)
+- [createAuthenticatedTransport API](/fs/git-auth-node/api/createAuthenticatedTransport)
+- [Credential Helpers API](/fs/git-auth-node/api/credentials)

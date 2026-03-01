@@ -1,0 +1,358 @@
+# Types
+
+Type definitions for `@catmint-fs/git`. All types are exported from the package root.
+
+## Import
+
+```typescript
+import type {
+  Author,
+  CommitOptions,
+  CommitInfo,
+  StatusEntry,
+  DiffEntry,
+  DiffHunk,
+  DiffLine,
+  MergeResult,
+  StashEntry,
+  RemoteInfo,
+  RefEntry,
+  CreateTagOptions,
+  LogOptions,
+  DiffOptions,
+  StashOptions,
+  ResetOptions,
+  FetchOptions,
+  PushOptions,
+  PullOptions,
+  InitRepositoryOptions,
+  CloneRepositoryOptions,
+  HttpTransportOptions,
+  GitTransport,
+} from "@catmint-fs/git";
+```
+
+---
+
+## Core Types
+
+### Author
+
+Identifies the author or committer of a commit or tag.
+
+```typescript
+interface Author {
+  name: string;
+  email: string;
+  timestamp?: Date;
+}
+```
+
+### CommitInfo
+
+A commit object read from the repository.
+
+```typescript
+interface CommitInfo {
+  oid: string;
+  message: string;
+  tree: string;
+  parents: string[];
+  author: Author;
+  committer: Author;
+}
+```
+
+### RefEntry
+
+A reference entry (branch, tag, or other ref).
+
+```typescript
+interface RefEntry {
+  name: string;
+  oid: string;
+}
+```
+
+---
+
+## Status Types
+
+### StatusEntry
+
+Returned by `repo.status()`. Describes the state of a single file.
+
+```typescript
+interface StatusEntry {
+  path: string;
+  indexStatus: "added" | "modified" | "deleted" | "unchanged";
+  workingStatus: "modified" | "deleted" | "unchanged" | "untracked";
+}
+```
+
+| Field | Compares | Description |
+| --- | --- | --- |
+| `indexStatus` | Index vs HEAD | Whether the file is staged for commit |
+| `workingStatus` | Working tree vs Index | Whether the file has unstaged changes |
+
+---
+
+## Diff Types
+
+### DiffEntry
+
+A file-level diff entry returned by `repo.diff()`.
+
+```typescript
+interface DiffEntry {
+  path: string;
+  type: "added" | "modified" | "deleted";
+  hunks: DiffHunk[];
+}
+```
+
+### DiffHunk
+
+A contiguous region of changes within a file.
+
+```typescript
+interface DiffHunk {
+  oldStart: number;
+  oldLines: number;
+  newStart: number;
+  newLines: number;
+  lines: DiffLine[];
+}
+```
+
+### DiffLine
+
+A single line within a diff hunk.
+
+```typescript
+interface DiffLine {
+  type: "context" | "add" | "delete";
+  content: string;
+}
+```
+
+---
+
+## Merge Types
+
+### MergeResult
+
+Returned by `repo.merge()`.
+
+```typescript
+interface MergeResult {
+  type: "fast-forward" | "merge-commit" | "already-up-to-date" | "conflict";
+  oid?: string;
+  conflicts?: string[];
+}
+```
+
+| Field | Description |
+| --- | --- |
+| `type` | The merge outcome |
+| `oid` | The resulting commit OID (present for `fast-forward` and `merge-commit`) |
+| `conflicts` | Array of conflicted file paths (present when `type` is `"conflict"`) |
+
+---
+
+## Stash Types
+
+### StashEntry
+
+A stash stack entry returned by `repo.listStashes()`.
+
+```typescript
+interface StashEntry {
+  index: number;
+  message: string;
+  oid: string;
+}
+```
+
+---
+
+## Remote Types
+
+### RemoteInfo
+
+A configured remote returned by `repo.listRemotes()`.
+
+```typescript
+interface RemoteInfo {
+  name: string;
+  url: string;
+}
+```
+
+### GitTransport
+
+Interface implemented by transport objects (e.g., [HttpTransport](/fs/git/api/httpTransport)).
+
+```typescript
+interface GitTransport {
+  discover(url: string, service: string): Promise<TransportDiscovery>;
+  request(url: string, service: string, body: Uint8Array): Promise<Uint8Array>;
+}
+```
+
+### TransportDiscovery
+
+Response from the transport discovery step.
+
+```typescript
+interface TransportDiscovery {
+  capabilities: string[];
+  refs: RefEntry[];
+}
+```
+
+---
+
+## Options Types
+
+### InitRepositoryOptions
+
+Options for [initRepository](/fs/git/api/initRepository).
+
+```typescript
+interface InitRepositoryOptions {
+  defaultBranch?: string;
+  bare?: boolean;
+}
+```
+
+### CloneRepositoryOptions
+
+Options for [cloneRepository](/fs/git/api/cloneRepository).
+
+```typescript
+interface CloneRepositoryOptions {
+  url: string;
+  branch?: string;
+  depth?: number;
+  bare?: boolean;
+  transport?: GitTransport;
+}
+```
+
+### CommitOptions
+
+Options for `repo.commit()`.
+
+```typescript
+interface CommitOptions {
+  message: string;
+  author: Author;
+  committer?: Author;
+}
+```
+
+### LogOptions
+
+Options for `repo.log()`.
+
+```typescript
+interface LogOptions {
+  maxCount?: number;
+  path?: string;
+}
+```
+
+### DiffOptions
+
+Options for `repo.diff()`.
+
+```typescript
+interface DiffOptions {
+  staged?: boolean;
+}
+```
+
+### CreateTagOptions
+
+Options for `repo.createTag()`.
+
+```typescript
+interface CreateTagOptions {
+  target?: string;
+  message?: string;
+  tagger?: Author;
+}
+```
+
+### StashOptions
+
+Options for `repo.stash()`.
+
+```typescript
+interface StashOptions {
+  message?: string;
+  author: Author;
+}
+```
+
+### ResetOptions
+
+Options for `repo.reset()`.
+
+```typescript
+interface ResetOptions {
+  mode?: "soft" | "mixed" | "hard";
+}
+```
+
+### FetchOptions
+
+Options for `repo.fetch()`.
+
+```typescript
+interface FetchOptions {
+  transport?: GitTransport;
+}
+```
+
+### PushOptions
+
+Options for `repo.push()`.
+
+```typescript
+interface PushOptions {
+  branch?: string;
+  transport?: GitTransport;
+}
+```
+
+### PullOptions
+
+Options for `repo.pull()`.
+
+```typescript
+interface PullOptions {
+  branch?: string;
+  transport?: GitTransport;
+}
+```
+
+### HttpTransportOptions
+
+Options for [httpTransport](/fs/git/api/httpTransport).
+
+```typescript
+interface HttpTransportOptions {
+  headers?: Record<string, string>;
+}
+```
+
+---
+
+## See Also
+
+- [Repository API](/fs/git/api/repository)
+- [initRepository](/fs/git/api/initRepository)
+- [cloneRepository](/fs/git/api/cloneRepository)
+- [httpTransport](/fs/git/api/httpTransport)

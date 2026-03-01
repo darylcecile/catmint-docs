@@ -1,0 +1,150 @@
+# LocalAdapter
+
+The built-in adapter that uses Node.js `fs` APIs to interact with the local filesystem. This is the default adapter used when no adapter is specified in `createLayer`.
+
+## Import
+
+```ts
+import { LocalAdapter } from "@catmint-fs/core";
+```
+
+## Signature
+
+```ts
+class LocalAdapter implements FsAdapter {
+  constructor();
+  capabilities(): AdapterCapabilities;
+  // ...all FsAdapter methods
+}
+```
+
+## Constructor
+
+The `LocalAdapter` constructor takes no arguments:
+
+```ts
+const adapter = new LocalAdapter();
+```
+
+## Capabilities
+
+```ts
+adapter.capabilities();
+// {
+//   permissions: true,
+//   symlinks: true,
+//   caseSensitive: boolean  // Detected from host filesystem
+// }
+```
+
+| Capability | Value | Notes |
+| --- | --- | --- |
+| `permissions` | `true` | Full `chmod`/`chown`/`lchown` support via Node.js `fs` |
+| `symlinks` | `true` | Full symlink support via Node.js `fs` |
+| `caseSensitive` | Detected | `true` on Linux (ext4), `false` on macOS (HFS+) and Windows (NTFS) |
+
+## Environment
+
+`LocalAdapter` requires Node.js. It uses the `node:fs/promises` API internally. It is **not** compatible with:
+
+- Browsers
+- Deno
+- Cloudflare Workers
+- Bun (may work but is not officially supported)
+
+For non-Node.js environments, use a [custom adapter](/fs/core/guides/custom-adapters) or the [SqliteAdapter](/fs/sqlite-adapter/overview).
+
+## Examples
+
+### Explicit usage
+
+```ts
+import { createLayer, LocalAdapter } from "@catmint-fs/core";
+
+const adapter = new LocalAdapter();
+const layer = createLayer({ root: "/path/to/project", adapter });
+
+const data = await layer.readFile("/package.json");
+console.log(new TextDecoder().decode(data));
+
+layer.dispose();
+```
+
+### Implicit usage (default)
+
+When no adapter is provided, `createLayer` uses `LocalAdapter` automatically:
+
+```ts
+import { createLayer } from "@catmint-fs/core";
+
+// This uses LocalAdapter under the hood
+const layer = createLayer({ root: "/path/to/project" });
+```
+
+### Reading and writing
+
+```ts
+import { createLayer, LocalAdapter } from "@catmint-fs/core";
+
+const layer = createLayer({
+  root: "/tmp/sandbox",
+  adapter: new LocalAdapter(),
+});
+
+// Read from disk
+const entries = await layer.readdir("/");
+console.log(entries);
+
+// Write through the layer (held in overlay)
+await layer.writeFile("/hello.txt", new TextEncoder().encode("Hello!"));
+
+// Apply to disk
+await layer.apply();
+
+layer.dispose();
+```
+
+### Permission operations
+
+```ts
+import { createLayer } from "@catmint-fs/core";
+
+const layer = createLayer({ root: "/tmp/sandbox" });
+
+await layer.writeFile("/script.sh", new TextEncoder().encode("#!/bin/sh\necho hi"));
+await layer.chmod("/script.sh", 0o755);
+
+await layer.apply();
+layer.dispose();
+```
+
+## Methods
+
+`LocalAdapter` implements all methods of the [`FsAdapter`](/fs/core/api/fs-adapter) interface. Each method maps directly to the corresponding `node:fs/promises` function:
+
+| Adapter Method | Node.js API |
+| --- | --- |
+| `readFile` | `fs.readFile` |
+| `createReadStream` | `fs.createReadStream` (wrapped in `ReadableStream`) |
+| `readdir` | `fs.readdir` with `{ withFileTypes: true }` |
+| `stat` | `fs.stat` |
+| `lstat` | `fs.lstat` |
+| `readlink` | `fs.readlink` |
+| `exists` | `fs.access` |
+| `writeFile` | `fs.writeFile` |
+| `mkdir` | `fs.mkdir` |
+| `rm` | `fs.rm` |
+| `rmdir` | `fs.rmdir` |
+| `rename` | `fs.rename` |
+| `symlink` | `fs.symlink` |
+| `chmod` | `fs.chmod` |
+| `chown` | `fs.chown` |
+| `lchown` | `fs.lchown` |
+| `checkPermission` | `fs.access` with mode flags |
+
+## See Also
+
+- [FsAdapter](/fs/core/api/fs-adapter) — the interface `LocalAdapter` implements
+- [Adapters guide](/fs/core/guides/adapters) — adapter concepts and choosing an adapter
+- [Custom Adapters guide](/fs/core/guides/custom-adapters) — building your own adapter
+- [SqliteAdapter](/fs/sqlite-adapter/overview) — alternative adapter for non-Node.js environments

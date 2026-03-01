@@ -1,0 +1,80 @@
+# Installation
+
+## Requirements
+
+- **Node.js 18** or later
+- **git** installed and available on `PATH`
+- **@catmint-fs/git** installed as a peer dependency
+
+The system `git` must have a credential helper configured for authentication to work. You can check your current configuration with:
+
+```bash
+git config --global credential.helper
+```
+
+If this returns nothing, see [Git's credential storage documentation](https://git-scm.com/docs/gitcredentials) for setup instructions.
+
+## Install
+
+```bash
+npm install @catmint-fs/git-auth-node @catmint-fs/git
+```
+
+```bash
+pnpm add @catmint-fs/git-auth-node @catmint-fs/git
+```
+
+```bash
+yarn add @catmint-fs/git-auth-node @catmint-fs/git
+```
+
+## Verify
+
+```typescript
+import { getCredentials } from "@catmint-fs/git-auth-node";
+
+// Attempt to look up credentials for a URL
+const creds = await getCredentials("https://github.com");
+console.log(creds); // { username: "...", password: "..." } or undefined
+```
+
+If `getCredentials` returns `undefined`, it means no credentials are stored for that host. This is expected if you have not previously authenticated.
+
+## Common Credential Helper Setup
+
+### macOS
+
+```bash
+git config --global credential.helper osxkeychain
+```
+
+### Windows
+
+```bash
+git config --global credential.helper wincred
+```
+
+Or with Git Credential Manager:
+
+```bash
+git config --global credential.helper manager-core
+```
+
+### Linux
+
+```bash
+# Store credentials in libsecret (GNOME Keyring)
+git config --global credential.helper libsecret
+
+# Or use an in-memory cache with a timeout
+git config --global credential.helper 'cache --timeout=3600'
+
+# Or store in a plaintext file (less secure)
+git config --global credential.helper store
+```
+
+## Next Steps
+
+- [Overview](/fs/git-auth-node/overview) -- understand the two usage patterns
+- [createNodeAuthCallbacks](/fs/git-auth-node/api/createNodeAuthCallbacks) -- callback-based authentication
+- [createAuthenticatedTransport](/fs/git-auth-node/api/createAuthenticatedTransport) -- pre-authenticated transport

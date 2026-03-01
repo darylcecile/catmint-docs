@@ -1,0 +1,159 @@
+# Symlinks
+
+`@catmint-fs/core` supports symbolic links through the layer API. Symlink support depends on the adapter's capabilities — adapters declare whether they support symlinks via `capabilities().symlinks`.
+
+## Creating Symlinks
+
+Use `symlink` to create a symbolic link that points to a target path:
+
+```ts
+// Create a symlink at /link.txt that points to /data/file.txt
+await layer.symlink("/data/file.txt", "/link.txt");
+```
+
+The first argument is the **target** (where the link points to) and the second is the **path** (where the link is created). This follows the POSIX `symlink(target, path)` convention.
+
+```ts
+// Create a relative symlink
+await layer.symlink("../shared/config.json", "/app/config.json");
+
+// Create a symlink to a directory
+await layer.symlink("/templates", "/current-templates");
+```
+
+## Reading Symlinks
+
+### readlink
+
+Use `readlink` to get the target path of a symbolic link without following it:
+
+```ts
+const target = await layer.readlink("/link.txt");
+console.log(target); // "/data/file.txt"
+```
+
+### stat vs. lstat
+
+`stat` follows symlinks and returns information about the target. `lstat` returns information about the link itself:
+
+```ts
+// Create a symlink
+await layer.symlink("/data/file.txt", "/link.txt");
+
+// stat follows the symlink — returns info about /data/file.txt
+const statResult = await layer.stat("/link.txt");
+console.log(statResult.type); // "file"
+
+// lstat does not follow — returns info about the link itself
+const lstatResult = await layer.lstat("/link.txt");
+console.log(lstatResult.type); // "symlink"
+```
+
+### Reading Through Symlinks
+
+`readFile` and other read operations follow symlinks automatically. Reading from a symlink returns the content of the target:
+
+```ts
+await layer.symlink("/data/file.txt", "/link.txt");
+
+// Reads /data/file.txt through the symlink
+const data = await layer.readFile("/link.txt");
+```
+
+## Dangling Symlinks
+
+A dangling symlink is a link whose target does not exist. `@catmint-fs/core` handles dangling symlinks as follows:
+
+- **Creating** a symlink to a non-existent target is allowed
+- **`readlink`** on a dangling symlink returns the target path
+- **`lstat`** on a dangling symlink returns symlink metadata
+- **`stat`** on a dangling symlink throws an error (the target cannot be stat'd)
+- **`readFile`** on a dangling symlink throws an error (no content to read)
+- **`exists`** on a dangling symlink returns `false` (the effective target does not exist)
+
+```ts
+// Create a dangling symlink
+await layer.symlink("/nonexistent.txt", "/broken-link");
+
+// readlink works
+const target = await layer.readlink("/broken-link");
+console.log(target); // "/nonexistent.txt"
+
+// lstat works
+const info = await layer.lstat("/broken-link");
+console.log(info.type); // "symlink"
+
+// stat throws
+await layer.stat("/broken-link"); // Error: ENOENT
+
+// exists returns false
+const exists = await layer.exists("/broken-link");
+console.log(exists); // false
+```
+
+## Symlink Chains
+
+When symlinks point to other symlinks, the layer follows the chain to resolve the final target:
+
+```ts
+await layer.writeFile("/real-file.txt", new TextEncoder().encode("content"));
+await layer.symlink("/real-file.txt", "/link-a");
+await layer.symlink("/link-a", "/link-b");
+
+// Follows link-b -> link-a -> real-file.txt
+const data = await layer.readFile("/link-b");
+console.log(new TextDecoder().decode(data)); // "content"
+```
+
+Circular symlink chains (where following the chain leads back to a link already visited) result in an error to prevent infinite loops.
+
+## Symlinks in Change Tracking
+
+Symlink operations are tracked like any other change:
+
+```ts
+await layer.symlink("/target", "/my-link");
+
+const changes = layer.getChanges();
+// [{ type: "create", path: "/my-link", entryType: "symlink" }]
+```
+
+Deleting a symlink:
+
+```ts
+await layer.rm("/my-link");
+
+const changes = layer.getChanges();
+// [{ type: "delete", path: "/my-link", entryType: "symlink" }]
+```
+
+## Ownership of Symlinks
+
+Use `lchown` to change ownership of the symlink itself, rather than the target it points to:
+
+```ts
+// Changes ownership of the symlink, not the target
+await layer.lchown("/my-link", 1000, 1000);
+
+// Changes ownership of the target file
+await layer.chown("/my-link", 1000, 1000);
+```
+
+See the [Permissions](/fs/core/guides/permissions) guide for more details.
+
+## Adapters Without Symlink Support
+
+If an adapter's `capabilities().symlinks` is `false`, calling `symlink` or `readlink` on the layer will throw:
+
+```ts
+const layer = createLayer({ root: "/", adapter: noSymlinkAdapter });
+
+await layer.symlink("/target", "/link");
+// Error: Adapter does not support symlinks
+```
+
+## See Also
+
+- [Layer API](/fs/core/api/layer) — `symlink`, `readlink`, `lstat`, `lchown` references
+- [FsAdapter API](/fs/core/api/fs-adapter) — adapter-level symlink operations
+- [Permissions](/fs/core/guides/permissions) — `lchown` and symlink ownership

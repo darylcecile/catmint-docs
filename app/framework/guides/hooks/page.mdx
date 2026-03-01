@@ -1,0 +1,305 @@
+# Hooks
+
+Catmint provides a set of React hooks for routing, data fetching, server interaction, and form handling. All hooks are imported from `catmint/hooks`.
+
+```ts
+import {
+  useParams,
+  useSearch,
+  useNavigation,
+  useServerFn,
+  useServerQuery,
+  useRouteData,
+  useFormAction,
+} from 'catmint/hooks'
+```
+
+## useParams
+
+Returns the dynamic route parameters for the current page as a typed object. Parameter names correspond to the bracketed directory names in your route structure.
+
+```tsx
+// app/blog/[slug]/page.tsx
+import { useParams } from 'catmint/hooks'
+
+export default function BlogPostPage() {
+  const { slug } = useParams<{ slug: string }>()
+
+  return <h1>Post: {slug}</h1>
+}
+```
+
+For routes with multiple dynamic segments, each segment is a key in the returned object:
+
+```tsx
+// app/shop/[category]/[item]/page.tsx
+import { useParams } from 'catmint/hooks'
+
+export default function ProductPage() {
+  const { category, item } = useParams<{ category: string; item: string }>()
+
+  return (
+    <div>
+      <p>Category: {category}</p>
+      <p>Item: {item}</p>
+    </div>
+  )
+}
+```
+
+Catch-all segments return an array of strings:
+
+```tsx
+// app/docs/[...path]/page.tsx
+import { useParams } from 'catmint/hooks'
+
+export default function DocsPage() {
+  const { path } = useParams<{ path: string[] }>()
+
+  return <p>You are viewing: {path.join('/')}</p>
+}
+```
+
+## useSearch
+
+Returns the current URL search parameters as a typed object. The hook is reactive -- when search params change (via navigation or `pushState`), the component re-renders with the updated values.
+
+```tsx
+// app/products/page.tsx
+import { useSearch } from 'catmint/hooks'
+
+interface ProductSearch {
+  q?: string
+  category?: string
+  page?: string
+  sort?: 'price' | 'name' | 'date'
+}
+
+export default function ProductsPage() {
+  const search = useSearch<ProductSearch>()
+
+  return (
+    <div>
+      {search.q && <p>Searching for: {search.q}</p>}
+      <p>Category: {search.category || 'all'}</p>
+      <p>Page: {search.page || '1'}</p>
+      <p>Sort: {search.sort || 'date'}</p>
+    </div>
+  )
+}
+```
+
+All search parameter values are strings (or `undefined` if not present). Parse them as needed for numeric or boolean values.
+
+## useNavigation
+
+Provides programmatic navigation and exposes the current navigation state. Returns an object with a `navigate` function and a `state` value.
+
+```tsx
+import { useNavigation } from 'catmint/hooks'
+
+export function NavigationExample() {
+  const { navigate, state } = useNavigation()
+
+  const goToSettings = () => {
+    navigate('/settings')
+  }
+
+  const goToProfile = () => {
+    navigate('/profile', { replace: true })
+  }
+
+  return (
+    <div>
+      <button onClick={goToSettings}>Settings</button>
+      <button onClick={goToProfile}>Profile (replace)</button>
+      {state === 'loading' && <p>Navigating...</p>}
+    </div>
+  )
+}
+```
+
+The `state` value is one of:
+
+| State | Description |
+| --- | --- |
+| `'idle'` | No navigation in progress |
+| `'loading'` | A navigation is in progress (loading data, rendering) |
+| `'submitting'` | A form submission is in progress |
+
+The `navigate` function accepts an optional second argument with navigation options:
+
+```ts
+navigate('/path', {
+  replace: true,   // Replace current history entry instead of pushing
+  scroll: false,   // Disable scroll-to-top after navigation
+})
+```
+
+## useServerFn
+
+Wraps a server function for mutation-style calls with automatic loading and error state tracking. It does not call the function automatically -- you invoke it explicitly, typically in response to a user action.
+
+```ts
+// app/lib/todos.fn.ts
+import { createServerFn } from 'catmint/server'
+
+export const addTodo = createServerFn(async (title: string) => {
+  const todo = await db.todos.create({ title })
+  return todo
+})
+```
+
+```tsx
+// app/components/add-todo.client.tsx
+import { useServerFn } from 'catmint/hooks'
+import { addTodo } from '../lib/todos.fn'
+
+export function AddTodo() {
+  const { call, data, error, isLoading } = useServerFn(addTodo)
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    const formData = new FormData(e.currentTarget)
+    await call(formData.get('title') as string)
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <input name="title" placeholder="New todo..." />
+      <button type="submit" disabled={isLoading}>
+        {isLoading ? 'Adding...' : 'Add'}
+      </button>
+      {error && <p>Error: {error.message}</p>}
+      {data && <p>Added: {data.title}</p>}
+    </form>
+  )
+}
+```
+
+The hook returns the following properties:
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `call` | `(...args) => Promise` | Invokes the server function with the given arguments |
+| `data` | `T \| undefined` | The return value from the last successful call |
+| `error` | `Error \| null` | The error from the last failed call, if any |
+| `isLoading` | `boolean` | Whether a call is currently in progress |
+
+## useServerQuery
+
+Wraps a server function for automatic data fetching. Unlike `useServerFn`, it calls the function immediately on mount and provides options for refetching and cache staleness.
+
+```ts
+// app/lib/todos.fn.ts
+import { createServerFn } from 'catmint/server'
+
+export const getTodos = createServerFn(async () => {
+  return await db.todos.findMany()
+})
+```
+
+```tsx
+// app/components/todo-list.client.tsx
+import { useServerQuery } from 'catmint/hooks'
+import { getTodos } from '../lib/todos.fn'
+
+export function TodoList() {
+  const { data, error, isLoading, refetch } = useServerQuery(getTodos, {
+    staleTime: 30_000, // Consider data fresh for 30 seconds
+  })
+
+  if (isLoading) return <p>Loading todos...</p>
+  if (error) return <p>Failed to load: {error.message}</p>
+
+  return (
+    <div>
+      <button onClick={refetch}>Refresh</button>
+      <ul>
+        {data?.map((todo) => (
+          <li key={todo.id}>{todo.title}</li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+```
+
+Options for `useServerQuery`:
+
+| Option | Type | Description |
+| --- | --- | --- |
+| `staleTime` | `number` | Milliseconds before data is considered stale. Defaults to 0. |
+| `enabled` | `boolean` | Whether to fetch automatically. Defaults to `true`. |
+
+## useRouteData
+
+Reads data provided by the server for the current route. This is the data returned from a `loader` function exported from your `page.tsx`:
+
+```tsx
+// app/dashboard/page.tsx
+export async function loader() {
+  const stats = await getStats()
+  return { stats }
+}
+
+export default function DashboardPage() {
+  const { stats } = useRouteData<{ stats: Stats }>()
+
+  return (
+    <div>
+      <h1>Dashboard</h1>
+      <p>Total users: {stats.totalUsers}</p>
+      <p>Revenue: {stats.revenue}</p>
+    </div>
+  )
+}
+```
+
+## useFormAction
+
+Tracks the state of a form submission backed by a server function. Works with the `<Form>` component from `catmint/form`.
+
+```tsx
+import { useFormAction } from 'catmint/hooks'
+import { Form } from 'catmint/form'
+import { updateProfile } from '../lib/profile.fn'
+
+export function ProfileForm() {
+  const { isSubmitting, error, data } = useFormAction(updateProfile)
+
+  return (
+    <Form action={updateProfile}>
+      <input name="name" placeholder="Your name" />
+      <input name="email" type="email" placeholder="Email" />
+      <button type="submit" disabled={isSubmitting}>
+        {isSubmitting ? 'Saving...' : 'Save'}
+      </button>
+      {error && <p>Error: {error.message}</p>}
+      {data?.success && <p>Profile updated.</p>}
+    </Form>
+  )
+}
+```
+
+The hook returns:
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `isSubmitting` | `boolean` | Whether the form is currently submitting |
+| `error` | `Error \| null` | Error from the last submission attempt |
+| `data` | `T \| undefined` | Return value from the server function after a successful submission |
+
+## Summary
+
+| Hook | Purpose |
+| --- | --- |
+| `useParams()` | Typed dynamic route parameters |
+| `useSearch()` | Reactive URL search parameters |
+| `useNavigation()` | Programmatic navigation and navigation state |
+| `useServerFn()` | Mutation-style server function calls with loading/error state |
+| `useServerQuery()` | Auto-fetching queries with refetch and stale time |
+| `useRouteData()` | Reading server-provided route data from loaders |
+| `useFormAction()` | Form submission state tracking |
+
+[Next: Form Actions →](/framework/guides/form-actions)

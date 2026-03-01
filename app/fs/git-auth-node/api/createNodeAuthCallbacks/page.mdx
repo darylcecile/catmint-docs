@@ -1,0 +1,103 @@
+# createNodeAuthCallbacks
+
+Creates `onAuth` and `onAuthFailure` callback functions compatible with `@catmint-fs/git` operations. These callbacks use the system's `git credential` helper to look up, store, and reject credentials automatically.
+
+## Import
+
+```typescript
+import { createNodeAuthCallbacks } from "@catmint-fs/git-auth-node";
+```
+
+## Signature
+
+```typescript
+function createNodeAuthCallbacks(): {
+  onAuth: (url: string) => Promise<{ username: string; password: string } | undefined>;
+  onAuthFailure: (url: string, auth: { username: string; password: string }) => Promise<void>;
+};
+```
+
+## Parameters
+
+None.
+
+## Return Value
+
+Returns an object with two callback functions:
+
+| Property        | Type                                                                          | Description                                                     |
+| --------------- | ----------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| `onAuth`        | `(url: string) => Promise<{ username: string; password: string } \| undefined>` | Called when authentication is needed. Looks up credentials via `git credential fill`. Returns credentials or `undefined` if none are available. On success, stores the credentials via `git credential approve`. |
+| `onAuthFailure` | `(url: string, auth: { username: string; password: string }) => Promise<void>` | Called when authentication fails. Rejects the credentials via `git credential reject` so the helper can remove them. |
+
+## Examples
+
+### Basic Clone
+
+```typescript
+import { createNodeAuthCallbacks } from "@catmint-fs/git-auth-node";
+import { clone } from "@catmint-fs/git";
+import { SqliteAdapter } from "@catmint-fs/sqlite-adapter";
+import { CatmintFs } from "@catmint-fs/core";
+
+const adapter = new SqliteAdapter({ database: ":memory:" });
+const fs = new CatmintFs(adapter);
+
+const { onAuth, onAuthFailure } = createNodeAuthCallbacks();
+
+await clone({
+  fs,
+  url: "https://github.com/my-org/private-repo.git",
+  dir: "/repo",
+  onAuth,
+  onAuthFailure,
+});
+```
+
+### Fetch with Authentication
+
+```typescript
+import { createNodeAuthCallbacks } from "@catmint-fs/git-auth-node";
+import { fetch } from "@catmint-fs/git";
+
+const { onAuth, onAuthFailure } = createNodeAuthCallbacks();
+
+await fetch({
+  fs,
+  dir: "/repo",
+  onAuth,
+  onAuthFailure,
+});
+```
+
+### Push with Authentication
+
+```typescript
+import { createNodeAuthCallbacks } from "@catmint-fs/git-auth-node";
+import { push } from "@catmint-fs/git";
+
+const { onAuth, onAuthFailure } = createNodeAuthCallbacks();
+
+await push({
+  fs,
+  dir: "/repo",
+  remote: "origin",
+  ref: "main",
+  onAuth,
+  onAuthFailure,
+});
+```
+
+## Behavior
+
+1. When `@catmint-fs/git` needs credentials, it calls `onAuth(url)`.
+2. `onAuth` runs `git credential fill` with the URL's protocol and host.
+3. If credentials are found, they are returned to `@catmint-fs/git`.
+4. If authentication succeeds, the credentials are approved via `git credential approve`.
+5. If authentication fails, `onAuthFailure` is called, which runs `git credential reject` to remove the bad credentials.
+
+## See Also
+
+- [createAuthenticatedTransport](/fs/git-auth-node/api/createAuthenticatedTransport)
+- [Credential Helpers](/fs/git-auth-node/api/credentials)
+- [@catmint-fs/git Overview](/fs/git/overview)

@@ -1,13 +1,13 @@
 import { useState, useEffect, useCallback } from "react";
 import { Command } from "cmdk";
 import { useNavigation } from "catmint/hooks";
-import type { NavSection } from "./nav-data";
+import type { NavPackage } from "./nav-data";
 
 interface CommandMenuProps {
-  sections: NavSection[];
+  packages: NavPackage[];
 }
 
-export function CommandMenu({ sections }: CommandMenuProps) {
+export function CommandMenu({ packages }: CommandMenuProps) {
   const [open, setOpen] = useState(false);
   const { navigate } = useNavigation();
 
@@ -63,52 +63,87 @@ export function CommandMenu({ sections }: CommandMenuProps) {
         onOpenChange={setOpen}
         label="Search documentation"
         loop
+        filter={(value, search, keywords) => {
+          const searchLower = search.toLowerCase();
+          const valueLower = value.toLowerCase();
+          const extendedValue = keywords
+            ? `${valueLower} ${keywords.join(" ").toLowerCase()}`
+            : valueLower;
+
+          // Exact match
+          if (extendedValue === searchLower) return 1.0;
+
+          // Starts with
+          if (extendedValue.startsWith(searchLower)) return 0.9;
+
+          // Word boundary match
+          const words = extendedValue.split(/\s+/);
+          for (const word of words) {
+            if (word.startsWith(searchLower)) return 0.8;
+          }
+
+          // Contains anywhere
+          if (extendedValue.includes(searchLower)) return 0.5;
+
+          // No match
+          return 0;
+        }}
       >
         <Command.Input placeholder="Search docs..." autoFocus />
         <Command.List>
           <Command.Empty>No results found.</Command.Empty>
 
-          {sections.map((section) => (
-            <Command.Group key={section.title} heading={section.title}>
-              {section.links.map((link) => (
-                <Command.Item
-                  key={link.href}
-                  value={`${section.title} ${link.label}`}
-                  onSelect={() => handleSelect(link.href)}
-                  keywords={[
-                    section.title.toLowerCase(),
-                    link.href.replace(/\//g, " ").trim(),
-                  ]}
-                >
-                  <span className="cmdk-item-icon">
-                    {getSectionIcon(section.title)}
-                  </span>
-                  <span className="cmdk-item-content">
-                    <span className="cmdk-item-label">{link.label}</span>
-                    <span className="cmdk-item-section">{section.title}</span>
-                  </span>
-                </Command.Item>
-              ))}
-            </Command.Group>
-          ))}
+          {packages.map((pkg) =>
+            pkg.sections.map((section) => {
+              const groupKey = `${pkg.id}:${section.title}`;
+              const groupHeading = `${pkg.label} — ${section.title}`;
+
+              return (
+                <Command.Group key={groupKey} heading={groupHeading}>
+                  {section.links.map((link) => (
+                    <Command.Item
+                      key={link.href}
+                      value={`${pkg.label} ${section.title} ${link.label}`}
+                      onSelect={() => handleSelect(link.href)}
+                      keywords={[
+                        pkg.label.toLowerCase(),
+                        section.title.toLowerCase(),
+                        link.href.replace(/\//g, " ").trim(),
+                      ]}
+                    >
+                      <span className="cmdk-item-icon">
+                        {getPackageIcon(pkg.id)}
+                      </span>
+                      <span className="cmdk-item-content">
+                        <span className="cmdk-item-label">{link.label}</span>
+                        <span className="cmdk-item-section">
+                          {pkg.label} — {section.title}
+                        </span>
+                      </span>
+                    </Command.Item>
+                  ))}
+                </Command.Group>
+              );
+            }),
+          )}
         </Command.List>
       </Command.Dialog>
     </>
   );
 }
 
-function getSectionIcon(section: string): string {
-  switch (section) {
-    case "Getting Started":
-      return "🏠";
-    case "Guides":
-      return "🙌🏽";
-    case "API Reference":
-      return "⬡";
-    case "Examples":
-      return "📙";
-    case "Architecture Decisions":
-      return "△";
+function getPackageIcon(packageId: string): string {
+  switch (packageId) {
+    case "framework":
+      return "F";
+    case "fs-core":
+      return "C";
+    case "fs-git":
+      return "G";
+    case "fs-sqlite":
+      return "S";
+    case "fs-git-auth":
+      return "A";
     default:
       return "●";
   }

@@ -1,0 +1,50 @@
+# Installation
+
+## Requirements
+
+- **Node.js 18** or later (this package is Node.js only)
+- **@catmint-fs/core** installed as a peer dependency
+
+`@catmint-fs/sqlite-adapter` uses [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) under the hood, which includes a native C++ addon. The addon is prebuilt for most platforms, but you may need a C++ compiler available if a prebuild is not available for your OS/architecture combination.
+
+## Install
+
+```bash
+npm install @catmint-fs/sqlite-adapter @catmint-fs/core
+```
+
+```bash
+pnpm add @catmint-fs/sqlite-adapter @catmint-fs/core
+```
+
+```bash
+yarn add @catmint-fs/sqlite-adapter @catmint-fs/core
+```
+
+## Verify
+
+```typescript
+import { SqliteAdapter } from "@catmint-fs/sqlite-adapter";
+
+const adapter = new SqliteAdapter({ database: ":memory:" });
+console.log(adapter.capabilities);
+// { permissions: true, symlinks: true, caseSensitive: true }
+```
+
+If this runs without errors, the native addon compiled and loaded successfully.
+
+## Platform Notes
+
+| Platform       | Status |
+| -------------- | ------ |
+| macOS (arm64)  | Prebuilt binary available |
+| macOS (x64)    | Prebuilt binary available |
+| Linux (x64)    | Prebuilt binary available |
+| Linux (arm64)  | Prebuilt binary available |
+| Windows (x64)  | Prebuilt binary available |
+| Alpine / musl  | Requires build from source (`python3`, `make`, `g++`) |
+
+## Next Steps
+
+- [Quick Start](/fs/sqlite-adapter/quick-start)
+- [SqliteAdapter API Reference](/fs/sqlite-adapter/api/sqlite-adapter)

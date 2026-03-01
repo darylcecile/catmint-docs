@@ -1,0 +1,434 @@
+# Layer
+
+The `Layer` class is the primary interface for interacting with the virtual filesystem. It provides POSIX-like methods for reading, writing, and managing files, with all mutations captured in an in-memory overlay.
+
+## Import
+
+A `Layer` is created by calling `createLayer`:
+
+```ts
+import { createLayer } from "@catmint-fs/core";
+
+const layer = createLayer({ root: "/path/to/project" });
+```
+
+## Reading Methods
+
+### readFile
+
+Read the entire contents of a file.
+
+```ts
+readFile(path: string): Promise<Uint8Array>
+```
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `path` | `string` | Path to the file (relative to root) |
+
+Returns the file contents as a `Uint8Array`. Throws if the file does not exist.
+
+```ts
+const data = await layer.readFile("/src/index.ts");
+const text = new TextDecoder().decode(data);
+```
+
+### createReadStream
+
+Create a readable stream for a file.
+
+```ts
+createReadStream(path: string): ReadableStream<Uint8Array>
+```
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `path` | `string` | Path to the file (relative to root) |
+
+Returns a Web `ReadableStream<Uint8Array>`. Useful for large files that should not be loaded entirely into memory.
+
+```ts
+const stream = await layer.createReadStream("/large-file.bin");
+const reader = stream.getReader();
+
+while (true) {
+  const { done, value } = await reader.read();
+  if (done) break;
+  process.stdout.write(value);
+}
+```
+
+### readdir
+
+List the contents of a directory.
+
+```ts
+readdir(path: string): Promise<DirentEntry[]>
+```
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `path` | `string` | Path to the directory (relative to root) |
+
+Returns an array of `DirentEntry` objects, each with `name` and `type` fields.
+
+```ts
+const entries = await layer.readdir("/src");
+for (const entry of entries) {
+  console.log(entry.name, entry.type); // "index.ts" "file"
+}
+```
+
+### stat
+
+Get metadata about a file, directory, or symlink target. Follows symlinks.
+
+```ts
+stat(path: string): Promise<StatResult>
+```
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `path` | `string` | Path to stat (relative to root) |
+
+```ts
+const info = await layer.stat("/package.json");
+console.log(info.type); // "file"
+console.log(info.size); // 1234
+```
+
+### lstat
+
+Get metadata about a file, directory, or symlink. Does **not** follow symlinks.
+
+```ts
+lstat(path: string): Promise<StatResult>
+```
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `path` | `string` | Path to stat (relative to root) |
+
+```ts
+const info = await layer.lstat("/my-link");
+console.log(info.type); // "symlink"
+```
+
+### readlink
+
+Read the target path of a symbolic link.
+
+```ts
+readlink(path: string): Promise<string>
+```
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `path` | `string` | Path to the symlink (relative to root) |
+
+```ts
+const target = await layer.readlink("/my-link");
+console.log(target); // "/data/file.txt"
+```
+
+### exists
+
+Check whether a path exists.
+
+```ts
+exists(path: string): Promise<boolean>
+```
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `path` | `string` | Path to check (relative to root) |
+
+```ts
+const fileExists = await layer.exists("/README.md");
+```
+
+## Writing Methods
+
+### writeFile
+
+Write data to a file. Creates the file if it does not exist, or overwrites it if it does.
+
+```ts
+writeFile(path: string, data: Uint8Array, options?: WriteOptions): Promise<void>
+```
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `path` | `string` | Yes | Path to the file (relative to root) |
+| `data` | `Uint8Array` | Yes | File contents |
+| `options` | `WriteOptions` | No | Write options (e.g., `mode`) |
+
+```ts
+const encoder = new TextEncoder();
+await layer.writeFile("/src/app.ts", encoder.encode("export default {};"));
+
+// With permissions
+await layer.writeFile("/script.sh", encoder.encode("#!/bin/sh\necho hi"), {
+  mode: 0o755,
+});
+```
+
+### mkdir
+
+Create a directory.
+
+```ts
+mkdir(path: string, options?: MkdirOptions): Promise<void>
+```
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `path` | `string` | Yes | Path to the directory (relative to root) |
+| `options` | `MkdirOptions` | No | Options (e.g., `{ recursive: true }`) |
+
+```ts
+await layer.mkdir("/src/utils");
+
+// Create nested directories
+await layer.mkdir("/src/components/ui/buttons", { recursive: true });
+```
+
+### rm
+
+Remove a file or directory.
+
+```ts
+rm(path: string, options?: RmOptions): Promise<void>
+```
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `path` | `string` | Yes | Path to remove (relative to root) |
+| `options` | `RmOptions` | No | Options (e.g., `{ recursive: true }`) |
+
+```ts
+await layer.rm("/old-file.ts");
+
+// Remove directory and all contents
+await layer.rm("/deprecated", { recursive: true });
+```
+
+### rmdir
+
+Remove an empty directory.
+
+```ts
+rmdir(path: string): Promise<void>
+```
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `path` | `string` | Path to the empty directory (relative to root) |
+
+```ts
+await layer.rmdir("/empty-dir");
+```
+
+### rename
+
+Rename or move a file or directory.
+
+```ts
+rename(from: string, to: string): Promise<void>
+```
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `from` | `string` | Current path (relative to root) |
+| `to` | `string` | New path (relative to root) |
+
+```ts
+await layer.rename("/src/old-name.ts", "/src/new-name.ts");
+```
+
+### symlink
+
+Create a symbolic link.
+
+```ts
+symlink(target: string, path: string): Promise<void>
+```
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `target` | `string` | The path the symlink points to |
+| `path` | `string` | The path where the symlink is created |
+
+```ts
+await layer.symlink("/data/config.json", "/app/config.json");
+```
+
+## Permission Methods
+
+### chmod
+
+Change file permissions.
+
+```ts
+chmod(path: string, mode: number): Promise<void>
+```
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `path` | `string` | Path to the file (relative to root) |
+| `mode` | `number` | Permission mode (e.g., `0o755`) |
+
+```ts
+await layer.chmod("/script.sh", 0o755);
+```
+
+### chown
+
+Change file ownership. Follows symlinks.
+
+```ts
+chown(path: string, uid: number, gid: number): Promise<void>
+```
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `path` | `string` | Path to the file (relative to root) |
+| `uid` | `number` | User ID |
+| `gid` | `number` | Group ID |
+
+```ts
+await layer.chown("/data/file.txt", 1000, 1000);
+```
+
+### lchown
+
+Change ownership of a symlink itself (does not follow the link).
+
+```ts
+lchown(path: string, uid: number, gid: number): Promise<void>
+```
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `path` | `string` | Path to the symlink (relative to root) |
+| `uid` | `number` | User ID |
+| `gid` | `number` | Group ID |
+
+```ts
+await layer.lchown("/my-link", 1000, 1000);
+```
+
+### getOwner
+
+Get the owner of a file.
+
+```ts
+getOwner(path: string): Promise<{ uid: number; gid: number }>
+```
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `path` | `string` | Path to the file (relative to root) |
+
+```ts
+const owner = await layer.getOwner("/data/file.txt");
+console.log(owner.uid, owner.gid);
+```
+
+## Change Tracking Methods
+
+### getChanges
+
+Get all pending changes.
+
+```ts
+getChanges(): ChangeEntry[]
+```
+
+Returns an array of `ChangeEntry` objects describing all mutations since the last `apply()` or `reset()`.
+
+```ts
+const changes = layer.getChanges();
+for (const change of changes) {
+  console.log(change.type, change.path, change.entryType);
+}
+```
+
+### getChangeDetail
+
+Get detailed information about a specific pending change.
+
+```ts
+getChangeDetail(path: string): ChangeDetail | null
+```
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `path` | `string` | Path to query (relative to root) |
+
+Returns a `ChangeDetail` object if the path has a pending change, or `null` if it does not.
+
+```ts
+const detail = layer.getChangeDetail("/src/new-file.ts");
+if (detail) {
+  console.log(detail.type, detail.entryType);
+}
+```
+
+## Lifecycle Methods
+
+### apply
+
+Apply all pending changes to the backing filesystem.
+
+```ts
+apply(options?: { transaction?: boolean }): Promise<ApplyResult>
+```
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `options.transaction` | `boolean` | No | Enable transactional mode (default: `false`) |
+
+In best-effort mode (default), returns an `ApplyResult` with the count of applied changes and any errors. In transactional mode, throws a `TransactionError` if any change fails.
+
+```ts
+// Best-effort
+const result = await layer.apply();
+console.log(result.applied, result.errors);
+
+// Transactional
+await layer.apply({ transaction: true });
+```
+
+### reset
+
+Discard all pending changes.
+
+```ts
+reset(): void
+```
+
+```ts
+layer.reset();
+```
+
+### dispose
+
+Release all resources held by the layer.
+
+```ts
+dispose(): void
+```
+
+```ts
+layer.dispose();
+```
+
+## See Also
+
+- [createLayer](/fs/core/api/createLayer) — create a new layer
+- [FsAdapter](/fs/core/api/fs-adapter) — the adapter interface
+- [Types](/fs/core/api/types) — all type definitions
+- [Layers guide](/fs/core/guides/layers) — concepts and lifecycle
+- [Change Tracking guide](/fs/core/guides/change-tracking) — understanding change semantics
+- [Applying Changes guide](/fs/core/guides/applying-changes) — best-effort vs. transactional mode

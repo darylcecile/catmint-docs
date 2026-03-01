@@ -1,0 +1,104 @@
+# defineRoutes
+
+Define routes explicitly using a configuration object instead of file-based routing. When `app/route.tsx` exports a `defineRoutes()` call, file-based routing is disabled entirely and only the defined routes are used.
+
+## Import
+
+```ts
+import { defineRoutes } from 'catmint/routing'
+```
+
+## Signature
+
+```ts
+function defineRoutes(routes: RouteDefinitions): Route[]
+```
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `routes` | `RouteDefinitions` | Yes | A map of route patterns to their page imports or config objects. |
+
+### `RouteDefinitions`
+
+```ts
+type RouteDefinitions = Record<string, Promise<unknown> | RouteConfig>
+```
+
+Each key is a route pattern string (must start with `/`). Values are either:
+
+- A dynamic `import()` expression (for pages)
+- A `RouteConfig` object with a `handler` field (for endpoints)
+
+### Route Pattern Syntax
+
+| Pattern | Description |
+|---------|-------------|
+| `/about` | Static segment |
+| `/user/[id]` | Dynamic segment — matches `/user/123` |
+| `/docs/[...slug]` | Catch-all — matches `/docs/a/b/c` |
+| `/api/[[...path]]` | Optional catch-all — matches `/api` and `/api/a/b` |
+
+### `RouteConfig`
+
+```ts
+interface RouteConfig {
+  handler?: Promise<unknown>
+  [key: string]: unknown
+}
+```
+
+## Return Value
+
+Returns an array of `Route` objects sorted by priority (most specific first). Static segments have the highest priority, followed by dynamic, catch-all, and optional catch-all.
+
+```ts
+interface Route {
+  pattern: string
+  segments: RouteSegment[]
+  filePath: string
+  type: 'page' | 'endpoint'
+  priority: number
+}
+```
+
+## Errors
+
+Throws an `Error` if a route pattern does not start with `/`.
+
+## Examples
+
+```ts
+// app/route.tsx
+import { defineRoutes } from 'catmint/routing'
+
+export default defineRoutes({
+  '/': import('./app/index.tsx'),
+  '/user/[id]': import('./app/users.tsx'),
+  '/docs/[...slug]': import('./app/docs.tsx'),
+  '/manifest.json': {
+    handler: import('./app/manifest.ts'),
+  },
+})
+```
+
+```ts
+// app/route.tsx — API-only routes
+import { defineRoutes } from 'catmint/routing'
+
+export default defineRoutes({
+  '/api/users': {
+    handler: import('./handlers/users.ts'),
+  },
+  '/api/users/[id]': {
+    handler: import('./handlers/user-by-id.ts'),
+  },
+})
+```
+
+## See Also
+
+- [redirect](/framework/api/redirect)
+- [Endpoints](/framework/api/endpoints)
+- [Layout](/framework/api/layout)

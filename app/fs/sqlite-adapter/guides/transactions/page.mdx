@@ -1,0 +1,88 @@
+# Transaction Support
+
+`@catmint-fs/sqlite-adapter` uses SQLite transactions to ensure filesystem consistency. This page explains how transactions work in the adapter and how to use direct database access for batch operations.
+
+## Automatic Transactions
+
+Every mutation through the `@catmint-fs/core` API (e.g., `writeFile`, `mkdir`, `rm`) is executed as an atomic SQLite operation. If a write fails partway through, the database is not left in a partially modified state.
+
+Multi-step operations like `importFrom` wrap all their writes in a single transaction:
+
+```typescript
+// All files are imported atomically
+await adapter.importFrom("./large-project");
+// If any file fails to import, none of them are written
+```
+
+## Direct Transaction Control
+
+For advanced use cases, access the underlying better-sqlite3 `Database` via `getDatabase()` and use its transaction API:
+
+```typescript
+import { SqliteAdapter } from "@catmint-fs/sqlite-adapter";
+
+const adapter = new SqliteAdapter({ database: ":memory:" });
+const db = adapter.getDatabase();
+
+// Create a batch insert transaction
+const insertMany = db.transaction((files: Array<{ path: string; content: string }>) => {
+  const stmt = db.prepare(
+    "INSERT OR REPLACE INTO files (path, type, content, mode, size, created_at, modified_at) VALUES (?, 'file', ?, 420, ?, datetime('now'), datetime('now'))"
+  );
+  for (const file of files) {
+    const buf = Buffer.from(file.content, "utf8");
+    stmt.run(file.path, buf, buf.length);
+  }
+});
+
+// All 1000 files are inserted in a single transaction
+insertMany(
+  Array.from({ length: 1000 }, (_, i) => ({
+    path: `/file-${i}.txt`,
+    content: `Content of file ${i}`,
+  }))
+);
+```
+
+better-sqlite3 transactions are synchronous and run on the main thread. This is a deliberate design choice by better-sqlite3 for maximum performance -- there is no async overhead.
+
+## WAL Mode
+
+better-sqlite3 enables WAL (Write-Ahead Logging) mode by default for on-disk databases. This allows concurrent reads while a write transaction is in progress. For in-memory databases, WAL mode is not applicable.
+
+WAL mode improves read performance in scenarios where you are reading from the virtual filesystem while another operation is writing to it (e.g., background import).
+
+## Consistency Guarantees
+
+| Scenario                          | Guarantee                                           |
+| --------------------------------- | --------------------------------------------------- |
+| Single `writeFile` call           | Atomic -- either the file is fully written or not   |
+| `importFrom` with many files      | Atomic -- all files are imported or none are         |
+| Process crash during write        | On-disk database rolls back to last consistent state |
+| Concurrent reads during write     | Readers see a consistent snapshot (WAL mode)        |
+| In-memory database process exit   | All data is lost (by design)                        |
+
+## Batch Operations via Core API
+
+If you do not need direct database access, you can still batch operations through `@catmint-fs/core` by writing files sequentially. Each individual operation is atomic, but the sequence as a whole is not transactional:
+
+```typescript
+import { SqliteAdapter } from "@catmint-fs/sqlite-adapter";
+import { CatmintFs } from "@catmint-fs/core";
+
+const adapter = new SqliteAdapter({ database: ":memory:" });
+const fs = new CatmintFs(adapter);
+
+// Each writeFile is atomic, but the batch is not
+await fs.mkdir("/src", { recursive: true });
+await fs.writeFile("/src/index.ts", 'export const a = 1;');
+await fs.writeFile("/src/utils.ts", 'export const b = 2;');
+```
+
+If you need the entire batch to be atomic, use the direct transaction approach shown above.
+
+## See Also
+
+- [Schema Reference](/fs/sqlite-adapter/guides/schema)
+- [Import/Export Guide](/fs/sqlite-adapter/guides/import-export)
+- [SqliteAdapter API](/fs/sqlite-adapter/api/sqlite-adapter)

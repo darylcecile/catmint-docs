@@ -1,0 +1,93 @@
+# CatmintAdapter
+
+Interface for platform-specific deployment adapters. Implement this interface to add support for a new deployment target.
+
+## Import
+
+```ts
+import type { CatmintAdapter } from 'catmint/config'
+```
+
+## Signature
+
+```ts
+interface CatmintAdapter {
+  name: string
+  adapt(context: AdapterContext): Promise<void>
+}
+```
+
+## Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `name` | `string` | Unique identifier for the adapter (e.g. `'@catmint/adapter-node'`). |
+| `adapt` | `(context: AdapterContext) => Promise<void>` | Called after the build completes. Transforms build output into platform-specific artifacts. |
+
+### `AdapterContext`
+
+The context object passed to `adapt()` during the build process:
+
+```ts
+interface AdapterContext {
+  manifest: unknown
+  serverDir: string
+  clientDir: string
+  staticDir: string
+  writeFile(path: string, content: string | Buffer): Promise<void>
+  copyDir(src: string, dest: string): Promise<void>
+  log: (message: string) => void
+}
+```
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `manifest` | `unknown` | The build manifest describing routes, server functions, and assets. |
+| `serverDir` | `string` | Absolute path to the server build output directory. |
+| `clientDir` | `string` | Absolute path to the client build output directory. |
+| `staticDir` | `string` | Absolute path to the pre-rendered static pages directory. |
+| `writeFile` | `(path: string, content: string \| Buffer) => Promise<void>` | Write a file to the output. |
+| `copyDir` | `(src: string, dest: string) => Promise<void>` | Copy a directory recursively. |
+| `log` | `(message: string) => void` | Log a message during the adapt step. |
+
+## Examples
+
+```ts
+// Using a built-in adapter
+import { defineConfig } from 'catmint/config'
+import node from 'catmint-adapter-node'
+
+export default defineConfig({
+  adapter: node({ port: 3000 }),
+})
+```
+
+```ts
+// Implementing a custom adapter
+import type { CatmintAdapter, AdapterContext } from 'catmint/config'
+
+function myAdapter(): CatmintAdapter {
+  return {
+    name: 'my-custom-adapter',
+    async adapt(context: AdapterContext) {
+      context.log('Building custom output...')
+
+      // Copy static assets
+      await context.copyDir(context.clientDir, '/output/public')
+
+      // Generate a custom entry point
+      await context.writeFile('/output/index.js', `
+        import { handler } from './server/handler.js'
+        export default handler
+      `)
+    },
+  }
+}
+```
+
+## See Also
+
+- [adapter-node](/framework/api/adapter-node)
+- [adapter-vercel](/framework/api/adapter-vercel)
+- [adapter-cloudflare](/framework/api/adapter-cloudflare)
+- [defineConfig](/framework/api/config)

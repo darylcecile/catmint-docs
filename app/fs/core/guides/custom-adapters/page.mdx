@@ -1,0 +1,229 @@
+# Custom Adapters
+
+You can create a custom `FsAdapter` to back a layer with any storage system — an in-memory store, a cloud object store, a database, or a remote API. This guide walks through the interface you need to implement and best practices for building adapters.
+
+## The FsAdapter Interface
+
+Every adapter must implement the `FsAdapter` interface:
+
+```ts
+import type { FsAdapter } from "@catmint-fs/core";
+
+class MyAdapter implements FsAdapter {
+  // Required methods (see below)
+}
+```
+
+The full interface includes reading, writing, metadata, permissions, and capability declarations. See the [FsAdapter API reference](/fs/core/api/fs-adapter) for the complete type definition.
+
+## Minimal Implementation
+
+At minimum, an adapter must implement all required methods. Here is a skeleton for an in-memory adapter:
+
+```ts
+import type {
+  FsAdapter,
+  AdapterCapabilities,
+  StatResult,
+  DirentEntry,
+  WriteOptions,
+  MkdirOptions,
+  RmOptions,
+  PermissionOp,
+} from "@catmint-fs/core";
+
+class InMemoryAdapter implements FsAdapter {
+  private files = new Map<string, Uint8Array>();
+  private dirs = new Set<string>(["/"]); // Root always exists
+
+  async readFile(path: string): Promise<Uint8Array> {
+    const data = this.files.get(path);
+    if (!data) throw new Error(`ENOENT: ${path}`);
+    return data;
+  }
+
+  createReadStream(path: string): ReadableStream<Uint8Array> {
+    const data = this.files.get(path);
+    if (!data) throw new Error(`ENOENT: ${path}`);
+    return new ReadableStream({
+      start(controller) {
+        controller.enqueue(data);
+        controller.close();
+      },
+    });
+  }
+
+  async readdir(path: string): Promise<DirentEntry[]> {
+    const entries: DirentEntry[] = [];
+    const prefix = path === "/" ? "/" : `${path}/`;
+
+    for (const filePath of this.files.keys()) {
+      if (filePath.startsWith(prefix)) {
+        const rest = filePath.slice(prefix.length);
+        if (!rest.includes("/")) {
+          entries.push({ name: rest, type: "file" });
+        }
+      }
+    }
+
+    for (const dirPath of this.dirs) {
+      if (dirPath.startsWith(prefix) && dirPath !== path) {
+        const rest = dirPath.slice(prefix.length);
+        if (!rest.includes("/")) {
+          entries.push({ name: rest, type: "directory" });
+        }
+      }
+    }
+
+    return entries;
+  }
+
+  async stat(path: string): Promise<StatResult> {
+    if (this.dirs.has(path)) {
+      return { type: "directory", size: 0, mode: 0o755, mtime: new Date() };
+    }
+    const data = this.files.get(path);
+    if (data) {
+      return { type: "file", size: data.length, mode: 0o644, mtime: new Date() };
+    }
+    throw new Error(`ENOENT: ${path}`);
+  }
+
+  async lstat(path: string): Promise<StatResult> {
+    return this.stat(path); // No symlinks in this adapter
+  }
+
+  async readlink(path: string): Promise<string> {
+    throw new Error("Symlinks not supported");
+  }
+
+  async exists(path: string): Promise<boolean> {
+    return this.files.has(path) || this.dirs.has(path);
+  }
+
+  async writeFile(path: string, data: Uint8Array): Promise<void> {
+    this.files.set(path, data);
+  }
+
+  async mkdir(path: string, options?: MkdirOptions): Promise<void> {
+    this.dirs.add(path);
+  }
+
+  async rm(path: string, options?: RmOptions): Promise<void> {
+    this.files.delete(path);
+    this.dirs.delete(path);
+    if (options?.recursive) {
+      const prefix = `${path}/`;
+      for (const key of this.files.keys()) {
+        if (key.startsWith(prefix)) this.files.delete(key);
+      }
+      for (const key of this.dirs) {
+        if (key.startsWith(prefix)) this.dirs.delete(key);
+      }
+    }
+  }
+
+  async rmdir(path: string): Promise<void> {
+    this.dirs.delete(path);
+  }
+
+  async rename(from: string, to: string): Promise<void> {
+    const data = this.files.get(from);
+    if (data) {
+      this.files.set(to, data);
+      this.files.delete(from);
+    }
+    if (this.dirs.has(from)) {
+      this.dirs.add(to);
+      this.dirs.delete(from);
+    }
+  }
+
+  async symlink(target: string, path: string): Promise<void> {
+    throw new Error("Symlinks not supported");
+  }
+
+  async chmod(path: string, mode: number): Promise<void> {
+    // No-op for this adapter
+  }
+
+  async chown(path: string, uid: number, gid: number): Promise<void> {
+    throw new Error("Permissions not supported");
+  }
+
+  async lchown(path: string, uid: number, gid: number): Promise<void> {
+    throw new Error("Permissions not supported");
+  }
+
+  async checkPermission(path: string, op: PermissionOp): Promise<void> {
+    // Allow everything
+  }
+
+  capabilities(): AdapterCapabilities {
+    return {
+      permissions: false,
+      symlinks: false,
+      caseSensitive: true,
+    };
+  }
+}
+```
+
+## Using Your Adapter
+
+Pass your adapter to `createLayer`:
+
+```ts
+import { createLayer } from "@catmint-fs/core";
+
+const adapter = new InMemoryAdapter();
+const layer = createLayer({ root: "/", adapter });
+
+await layer.writeFile("/hello.txt", new TextEncoder().encode("Hello!"));
+const data = await layer.readFile("/hello.txt");
+console.log(new TextDecoder().decode(data)); // "Hello!"
+```
+
+## Capabilities
+
+The `capabilities()` method tells the layer which features your adapter supports. Be accurate — if you declare `symlinks: true` but your `symlink` method throws, the layer will allow symlink operations through and the error will surface to the caller unexpectedly.
+
+```ts
+capabilities(): AdapterCapabilities {
+  return {
+    permissions: false,   // Set true if chmod/chown work
+    symlinks: false,      // Set true if symlink/readlink work
+    caseSensitive: true,  // Set based on your storage semantics
+  };
+}
+```
+
+## Optional Initialization
+
+If your adapter needs setup (opening a database connection, creating tables, etc.), implement the optional `initialize` method:
+
+```ts
+async initialize(root: string): Promise<void> {
+  await this.db.connect();
+  await this.db.createTables();
+  this.root = root;
+}
+```
+
+The layer calls `initialize(root)` during creation if the method exists.
+
+## Best Practices
+
+- **Use `Uint8Array` everywhere** — not Node.js `Buffer`. This keeps your adapter portable across runtimes.
+- **Use `ReadableStream`** — not Node.js `Readable`. The Web Streams API is available in all modern runtimes.
+- **Throw meaningful errors** — include the path and a recognizable error code (e.g., `ENOENT`, `EACCES`) in error messages.
+- **Declare capabilities honestly** — if your backend does not support a feature, set it to `false` in `capabilities()`.
+- **Handle recursive operations** — `mkdir` with `{ recursive: true }` should create all intermediate directories. `rm` with `{ recursive: true }` should delete all descendants.
+- **Handle edge cases** — what happens when you `readdir` an empty directory? When you `stat` the root? When you `rename` across directories? Test these scenarios.
+
+## See Also
+
+- [FsAdapter API](/fs/core/api/fs-adapter) — complete interface reference
+- [Adapters](/fs/core/guides/adapters) — overview of the adapter system
+- [LocalAdapter API](/fs/core/api/local-adapter) — built-in adapter for reference
+- [SqliteAdapter](/fs/sqlite-adapter/overview) — a production adapter implementation

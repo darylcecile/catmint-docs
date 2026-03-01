@@ -1,0 +1,150 @@
+# Remotes
+
+Remote operations let you synchronize a local repository with a remote server. `@catmint-fs/git` implements the git smart HTTP protocol for fetch, push, and pull.
+
+## Managing Remotes
+
+### Add a Remote
+
+```typescript
+await repo.addRemote("origin", "https://github.com/user/repo.git");
+```
+
+### List Remotes
+
+```typescript
+const remotes = await repo.listRemotes();
+// [{ name: "origin", url: "https://github.com/user/repo.git" }]
+```
+
+### Delete a Remote
+
+```typescript
+await repo.deleteRemote("origin");
+```
+
+## HTTP Transport
+
+All network operations require a transport object. The `httpTransport` factory creates one using the Fetch API:
+
+```typescript
+import { httpTransport } from "@catmint-fs/git";
+
+const transport = httpTransport();
+```
+
+### Authenticated Transport
+
+Pass headers for authentication:
+
+```typescript
+const transport = httpTransport({
+  headers: {
+    Authorization: "Bearer ghp_xxxxxxxxxxxx",
+  },
+});
+```
+
+For Node.js credential helpers (SSH keys, system keychain), see [@catmint-fs/git-auth-node](/fs/git-auth-node/overview).
+
+## Fetch
+
+Download objects and refs from a remote without merging:
+
+```typescript
+await repo.fetch("origin", { transport });
+```
+
+After fetching, remote-tracking branches are updated (e.g., `refs/remotes/origin/main`).
+
+## Pull
+
+Fetch and merge in one step:
+
+```typescript
+await repo.pull("origin", {
+  branch: "main",
+  transport,
+});
+```
+
+Pull performs a fetch followed by a merge of the remote branch into the current local branch.
+
+## Push
+
+Upload local commits to a remote:
+
+```typescript
+await repo.push("origin", { transport });
+```
+
+Push sends the current branch's commits and objects to the remote.
+
+### Push a Specific Branch
+
+```typescript
+await repo.push("origin", {
+  branch: "feature/auth",
+  transport,
+});
+```
+
+## Setting Upstream
+
+Link a local branch to a remote-tracking branch:
+
+```typescript
+await repo.setUpstream("main", "origin/main");
+```
+
+## Full Workflow
+
+```typescript
+import { createMemoryLayer } from "@catmint-fs/core";
+import { cloneRepository, httpTransport } from "@catmint-fs/git";
+
+const layer = createMemoryLayer();
+const transport = httpTransport({
+  headers: { Authorization: "Bearer ghp_xxxxxxxxxxxx" },
+});
+
+// Clone
+const repo = await cloneRepository(layer, {
+  url: "https://github.com/user/repo.git",
+  transport,
+});
+
+// Make changes
+await layer.writeFile("/new-file.ts", "export const x = 1;");
+await repo.add("new-file.ts");
+await repo.commit({
+  message: "Add new file",
+  author: { name: "Alice", email: "alice@example.com" },
+});
+
+// Push changes to remote
+await repo.push("origin", { transport });
+```
+
+## Working with Multiple Remotes
+
+```typescript
+// Add multiple remotes
+await repo.addRemote("origin", "https://github.com/user/repo.git");
+await repo.addRemote("upstream", "https://github.com/org/repo.git");
+
+// Fetch from upstream
+await repo.fetch("upstream", { transport });
+
+// Pull from upstream, push to origin
+await repo.pull("upstream", { branch: "main", transport });
+await repo.push("origin", { transport });
+```
+
+## See Also
+
+- [Repositories (cloning)](/fs/git/guides/repositories)
+- [API: httpTransport](/fs/git/api/httpTransport)
+- [API: cloneRepository](/fs/git/api/cloneRepository)
+- [API: Repository](/fs/git/api/repository)
+- [@catmint-fs/git-auth-node](/fs/git-auth-node/overview)

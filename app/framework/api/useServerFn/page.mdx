@@ -1,0 +1,100 @@
+# useServerFn
+
+Wraps a server function for mutation-style usage in client components. Tracks loading, error, and result state automatically, and provides a function to execute the server call.
+
+## Import
+
+```ts
+import { useServerFn } from "catmint/hooks";
+```
+
+## Signature
+
+```ts
+function useServerFn<TInput, TOutput>(
+  fn: (input: TInput) => Promise<TOutput>,
+): ServerFnState<TInput, TOutput>;
+```
+
+```ts
+interface ServerFnState<TInput, TOutput> {
+  execute: (input: TInput) => Promise<TOutput>;
+  data: TOutput | undefined;
+  error: Error | undefined;
+  loading: boolean;
+  reset: () => void;
+}
+```
+
+## Parameters
+
+| Parameter | Type                                  | Required | Description                                      |
+| --------- | ------------------------------------- | -------- | ------------------------------------------------ |
+| `fn`      | `(input: TInput) => Promise<TOutput>` | Yes      | A server function created with `createServerFn`. |
+
+## Return Value
+
+| Property  | Type                                  | Description                                                                                      |
+| --------- | ------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `execute` | `(input: TInput) => Promise<TOutput>` | Call this to invoke the server function. Returns the result and updates `data`. Throws on error. |
+| `data`    | `TOutput \| undefined`                | The most recent successful result, or `undefined` if not yet called.                             |
+| `error`   | `Error \| undefined`                  | The most recent error, or `undefined` if no error occurred. Cleared on the next `execute` call.  |
+| `loading` | `boolean`                             | `true` while the server function is in flight.                                                   |
+| `reset`   | `() => void`                          | Resets `data`, `error`, and `loading` to their initial values.                                   |
+
+## Examples
+
+### Basic mutation
+
+```tsx
+// ProfileForm.client.tsx
+import { useServerFn } from "catmint/hooks";
+import { updateProfile } from "./actions";
+
+function ProfileForm({ profile }) {
+  const { execute, loading, error } = useServerFn(updateProfile);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget as HTMLFormElement);
+    await execute({ name: formData.get("name") as string });
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <input name="name" defaultValue={profile.name} />
+      <button disabled={loading}>{loading ? "Saving..." : "Save"}</button>
+      {error && <p className="error">{error.message}</p>}
+    </form>
+  );
+}
+```
+
+### Using the result
+
+```tsx
+const { execute, data } = useServerFn(createItem);
+
+const handleCreate = async () => {
+  const item = await execute({ title: "New Item" });
+  console.log("Created:", item.id);
+};
+```
+
+### Resetting state
+
+```tsx
+const { execute, data, reset } = useServerFn(deleteItem);
+
+// After a successful deletion, reset to allow another
+const handleDelete = async (id: string) => {
+  await execute({ id });
+  setTimeout(() => reset(), 3000); // Clear success state after 3s
+};
+```
+
+## See Also
+
+- [createServerFn](/framework/api/createServerFn)
+- [useServerQuery](/framework/api/useServerQuery)
+- [useFormAction](/framework/api/useFormAction)

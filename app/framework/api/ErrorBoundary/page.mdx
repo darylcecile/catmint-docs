@@ -1,0 +1,84 @@
+# ErrorBoundary
+
+React error boundary component that catches errors in its child component tree and renders a fallback UI. Uses React's class component error boundary mechanism (`getDerivedStateFromError` and `componentDidCatch`).
+
+## Import
+
+```ts
+import { ErrorBoundary } from 'catmint/error'
+```
+
+## Signature
+
+```tsx
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState>
+```
+
+## Props
+
+| Prop | Type | Required | Description |
+|------|------|----------|-------------|
+| `children` | `ReactNode` | Yes | The component tree to wrap with error catching |
+| `fallback` | `(props: ErrorFallbackProps) => ReactNode` | Yes | Render function called when an error is caught |
+
+### `ErrorBoundaryProps`
+
+```ts
+interface ErrorBoundaryProps {
+  children: ReactNode
+  fallback: (props: ErrorFallbackProps) => ReactNode
+}
+```
+
+### `ErrorFallbackProps`
+
+```ts
+interface ErrorFallbackProps {
+  error: Error
+  reset: () => void
+}
+```
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `error` | `Error` | The caught error instance |
+| `reset` | `() => void` | Function to reset the error state and re-render the children |
+
+## Examples
+
+```tsx
+import { ErrorBoundary } from 'catmint/error'
+
+<ErrorBoundary fallback={({ error, reset }) => (
+  <div>
+    <p>Error: {error.message}</p>
+    <button onClick={reset}>Retry</button>
+  </div>
+)}>
+  <MyComponent />
+</ErrorBoundary>
+```
+
+```tsx
+// Nested error boundaries for granular error handling
+function App() {
+  return (
+    <ErrorBoundary fallback={({ error }) => <p>App error: {error.message}</p>}>
+      <Header />
+      <ErrorBoundary fallback={({ error, reset }) => (
+        <div>
+          <p>Content failed to load.</p>
+          <button onClick={reset}>Try again</button>
+        </div>
+      )}>
+        <MainContent />
+      </ErrorBoundary>
+      <Footer />
+    </ErrorBoundary>
+  )
+}
+```
+
+## See Also
+
+- [Form](/framework/api/Form)

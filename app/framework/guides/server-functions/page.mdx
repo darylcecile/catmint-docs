@@ -1,0 +1,246 @@
+# Server Functions
+
+Server functions let you write server-side logic that can be called directly from React components. On the server, they execute as normal function calls. On the client, Catmint's Vite plugin compiles them into `fetch` requests to auto-generated API endpoints. This guide covers `createServerFn`, validation, isomorphic functions, route data bridging, and the compilation model.
+
+## createServerFn
+
+The `createServerFn` function from `catmint/server` defines a server function using a chained builder API:
+
+```ts
+// app/lib/posts.fn.ts
+import { createServerFn } from 'catmint/server'
+import { db } from './db.server'
+
+export const getPosts = createServerFn()
+  .handler(async () => {
+    const posts = await db.post.findMany({
+      orderBy: { createdAt: 'desc' },
+    })
+    return posts
+  })
+```
+
+The `.handler()` method defines the function body. The handler runs exclusively on the server. You can safely use database clients, file system access, environment variables, and other server-only APIs inside it.
+
+### Calling from a Component
+
+```tsx
+// app/blog/page.tsx
+import { getPosts } from '../lib/posts.fn'
+
+export default async function BlogPage() {
+  const posts = await getPosts()
+
+  return (
+    <div>
+      <h1>Blog</h1>
+      <ul>
+        {posts.map((post) => (
+          <li key={post.id}>{post.title}</li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+```
+
+## Input with .input()
+
+Use the `.input()` method to provide type-safe arguments to your server function. The input is passed to the handler as its first argument:
+
+```ts
+// app/lib/posts.fn.ts
+import { createServerFn } from 'catmint/server'
+import { db } from './db.server'
+
+export const getPost = createServerFn()
+  .input<{ slug: string }>()
+  .handler(async ({ slug }) => {
+    const post = await db.post.findUnique({ where: { slug } })
+    if (!post) {
+      throw new Error('Post not found')
+    }
+    return post
+  })
+
+export const createPost = createServerFn()
+  .input<{ title: string; body: string }>()
+  .handler(async ({ title, body }) => {
+    return db.post.create({
+      data: { title, body, slug: title.toLowerCase().replace(/\s+/g, '-') },
+    })
+  })
+```
+
+```ts
+// Calling with input
+const post = await getPost({ slug: 'hello-world' })
+await createPost({ title: 'New Post', body: 'Content here' })
+```
+
+## Validation with .validator()
+
+The `.validator()` method adds runtime validation to the input. It runs before the handler and rejects invalid data with a 400 status code. Use any validation library or write custom logic:
+
+```ts
+// app/lib/posts.fn.ts
+import { createServerFn } from 'catmint/server'
+import { z } from 'zod'
+import { db } from './db.server'
+
+const CreatePostSchema = z.object({
+  title: z.string().min(1).max(200),
+  body: z.string().min(1),
+  tags: z.array(z.string()).optional(),
+})
+
+export const createPost = createServerFn()
+  .input<z.infer<typeof CreatePostSchema>>()
+  .validator((data) => CreatePostSchema.parse(data))
+  .handler(async ({ title, body, tags }) => {
+    return db.post.create({
+      data: { title, body, tags },
+    })
+  })
+```
+
+The validator function receives the raw input and should return the validated data (or throw an error). The validated output is passed to the handler.
+
+## Method Chaining Order
+
+The builder methods must be chained in a specific order:
+
+```ts
+createServerFn()
+  .input<InputType>()        // 1. Define input type (optional)
+  .validator(validateFn)     // 2. Add validation (optional, requires .input())
+  .handler(handlerFn)        // 3. Define the handler (required)
+```
+
+| Method | Required | Description |
+| --- | --- | --- |
+| `.input<T>()` | No | Declares the TypeScript type for the function's input |
+| `.validator(fn)` | No | Adds runtime validation before the handler executes |
+| `.handler(fn)` | Yes | The server-side function body |
+
+## Client-Side Compilation
+
+When a server function is imported in a client component, Catmint's Vite plugin transforms the import. Instead of bundling the handler code into the client, it replaces the function with a `fetch` call to an auto-generated endpoint:
+
+```ts
+// What you write (client component):
+import { createPost } from '../lib/posts.fn'
+await createPost({ title: 'Hello', body: 'World' })
+
+// What the client bundle contains (conceptually):
+async function createPost(input) {
+  const res = await fetch('/_catmint/fn/posts/createPost', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+  return res.json()
+}
+```
+
+Server function files use the `*.fn.ts` suffix to signal this transformation to the Vite plugin. The handler code, its dependencies, and any server-only imports are excluded from the client bundle.
+
+## Content-Type Validation
+
+Server functions validate the `Content-Type` header on incoming requests. By default, only `application/json` is accepted. Requests with an unexpected content type receive a `415 Unsupported Media Type` response. This prevents CSRF attacks by ensuring that only intentional API calls trigger the handler.
+
+## createIsomorphicFn
+
+Use `createIsomorphicFn` from `catmint/server` when you need different implementations for server and client environments. The correct implementation is selected at build time:
+
+```ts
+// app/lib/analytics.ts
+import { createIsomorphicFn } from 'catmint/server'
+
+export const trackEvent = createIsomorphicFn()
+  .server((event: string, data: Record<string, unknown>) => {
+    // Server: write to database
+    console.log('Server tracking:', event, data)
+  })
+  .client((event: string, data: Record<string, unknown>) => {
+    // Client: send to analytics service
+    window.analytics?.track(event, data)
+  })
+```
+
+The `.server()` handler is stripped from the client bundle, and the `.client()` handler is stripped from the server bundle. Both must have the same function signature.
+
+## Route Data Bridge: provideRouteData and useRouteData
+
+The `provideRouteData` and `useRouteData` functions create a typed bridge for passing data from server functions to components. This is the recommended way to load initial data for a route:
+
+```ts
+// app/blog/data.fn.ts
+import { createServerFn } from 'catmint/server'
+import { provideRouteData } from 'catmint/server'
+import { db } from '../lib/db.server'
+
+export const blogData = provideRouteData(
+  createServerFn().handler(async () => {
+    const posts = await db.post.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+    })
+    return { posts }
+  })
+)
+```
+
+```tsx
+// app/blog/page.tsx
+import { useRouteData } from 'catmint/server'
+import { blogData } from './data.fn'
+
+export default function BlogPage() {
+  const { posts } = useRouteData(blogData)
+
+  return (
+    <div>
+      <h1>Blog</h1>
+      <ul>
+        {posts.map((post) => (
+          <li key={post.id}>{post.title}</li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+```
+
+The `useRouteData` hook is fully typed based on the return type of the server function passed to `provideRouteData`. On the server, it invokes the function directly. On the client, it reads the serialized data embedded during SSR.
+
+## Error Handling
+
+Errors thrown inside a server function handler are serialized and sent back to the caller. On the client, they are re-thrown as errors with the original message:
+
+```ts
+// app/lib/posts.fn.ts
+export const deletePost = createServerFn()
+  .input<{ id: string }>()
+  .handler(async ({ id }) => {
+    const post = await db.post.findUnique({ where: { id } })
+    if (!post) {
+      throw new Error('Post not found')
+    }
+    await db.post.delete({ where: { id } })
+    return { success: true }
+  })
+
+// Client usage with error handling
+try {
+  await deletePost({ id: '123' })
+} catch (error) {
+  console.error('Failed to delete:', error.message)
+}
+```
+
+## Next Steps
+
+- [React Server Components](/framework/guides/rsc) -- server and client component boundaries
+- [API Endpoints](/framework/guides/api-endpoints) -- define REST-style HTTP handlers
+- [Caching](/framework/guides/caching) -- cache server function responses and route data

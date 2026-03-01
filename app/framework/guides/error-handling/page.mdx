@@ -1,0 +1,299 @@
+# Error Handling
+
+Catmint provides a layered error handling system that covers rendering errors, server function failures, and HTTP status errors. Errors can be caught at the route level with `error.tsx`, at the component level with `<ErrorBoundary>`, and translated into status pages with `StatusError` and `statusResponse`.
+
+## error.tsx File Convention
+
+Place an `error.tsx` file in any route directory to catch errors thrown by the page or its children. It acts as a React error boundary scoped to that route segment. The component receives an `error` object and a `reset` function. The error boundary
+is a client component by default (this cannot be changed)
+
+```tsx
+// app/dashboard/error.tsx
+
+export default function DashboardError({
+  error,
+  reset,
+}: {
+  error: Error;
+  reset: () => void;
+}) {
+  return (
+    <div>
+      <h2>Something went wrong</h2>
+      <p>{error.message}</p>
+      <button onClick={reset}>Try again</button>
+    </div>
+  );
+}
+```
+
+The `error` prop contains the thrown error. The `reset` function clears the error state and attempts to re-render the route segment.
+
+### Error boundary hierarchy
+
+Error boundaries follow the route hierarchy. An error thrown in `app/dashboard/settings/page.tsx` is first caught by `app/dashboard/settings/error.tsx`, then by `app/dashboard/error.tsx`, and finally by `app/error.tsx`.
+
+```txt
+app/
+  error.tsx                       # Catches errors from all routes
+  dashboard/
+    error.tsx                     # Catches errors from dashboard routes
+    page.tsx
+    settings/
+      error.tsx                   # Catches errors from settings only
+      page.tsx
+```
+
+> An `error.tsx` file does not catch errors thrown by the `layout.tsx` in the same directory. To catch layout errors, place `error.tsx` in the parent directory.
+
+## ErrorBoundary Component
+
+For more granular error handling within a page, use the `<ErrorBoundary>` class component. It wraps a section of your UI and catches errors from its children.
+
+```tsx
+import { ErrorBoundary } from "catmint/error";
+
+function ErrorFallback({ error, reset }: { error: Error; reset: () => void }) {
+  return (
+    <div>
+      <p>Failed to load this section: {error.message}</p>
+      <button onClick={reset}>Retry</button>
+    </div>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <div>
+      <h1>Dashboard</h1>
+
+      <ErrorBoundary fallback={ErrorFallback}>
+        <RevenueChart />
+      </ErrorBoundary>
+
+      <ErrorBoundary fallback={ErrorFallback}>
+        <UserTable />
+      </ErrorBoundary>
+    </div>
+  );
+}
+```
+
+The `fallback` prop accepts a component that receives `error` and `reset` props, the same interface as `error.tsx`. If one section fails, the rest of the page continues to work.
+
+## StatusError
+
+The `StatusError` class from `catmint/server` is an `Error` subclass that carries an HTTP status code. When thrown in server code, Catmint catches it and renders the corresponding status page instead of showing a generic error.
+
+```ts
+import { StatusError } from "catmint/server";
+
+// In a server function
+export const getPost = createServerFn(async (slug: string) => {
+  const post = await db.posts.findBySlug(slug);
+
+  if (!post) {
+    throw new StatusError(404, `Post "${slug}" not found.`);
+  }
+
+  if (post.draft) {
+    throw new StatusError(403, "This post is not published yet.");
+  }
+
+  return post;
+});
+```
+
+The `StatusError` constructor:
+
+```ts
+new StatusError(statusCode: number, message?: string)
+
+// Examples
+throw new StatusError(401)                    // Uses default "Unauthorized" message
+throw new StatusError(403, 'Admin only')      // Custom message
+throw new StatusError(404, 'Resource missing')
+throw new StatusError(500, 'Database error')
+```
+
+## statusResponse
+
+The `statusResponse` function creates a `Response` object that triggers the matching status page. Unlike `StatusError`, it does not throw -- it returns a response, which is useful in middleware and loaders where you want explicit control flow.
+
+```ts
+import { statusResponse } from "catmint/server";
+
+// In a loader
+export async function loader({ params }: { params: { id: string } }) {
+  const item = await db.items.find(params.id);
+
+  if (!item) {
+    return statusResponse(404, "Item not found.");
+  }
+
+  return { item };
+}
+
+// In middleware
+export async function middleware(
+  request: Request,
+  next: () => Promise<Response>,
+) {
+  if (isMaintenanceMode()) {
+    return statusResponse(503, "Service temporarily unavailable.");
+  }
+  return next();
+}
+```
+
+## Error Handling in Server Functions
+
+Errors thrown in server functions are serialized and sent back to the client. The `useServerFn` hook captures these errors in its `error` state. Use standard `try/catch` on the server side to handle expected failures gracefully:
+
+```ts
+// app/lib/payments.fn.ts
+import { createServerFn } from "catmint/server";
+
+export const processPayment = createServerFn(
+  async (data: { amount: number; token: string }) => {
+    try {
+      const result = await paymentGateway.charge(data);
+      return { success: true, transactionId: result.id };
+    } catch (err) {
+      // Log the full error on the server
+      console.error("Payment failed:", err);
+
+      // Return a safe error message to the client
+      return {
+        success: false,
+        error: "Payment processing failed. Please try again.",
+      };
+    }
+  },
+);
+```
+
+If you want the error to propagate and be caught by an error boundary, re-throw it or let it bubble up:
+
+```ts
+export const dangerousAction = createServerFn(async () => {
+  // This error will be caught by the nearest ErrorBoundary or error.tsx
+  throw new Error("Something critical failed");
+});
+```
+
+## Error Propagation in Middleware
+
+Middleware follows an onion model. Errors thrown in downstream handlers bubble up through the middleware chain. You can catch errors in middleware to log them, transform them, or return a different response:
+
+```ts
+// app/middleware.ts
+import { StatusError, statusResponse } from "catmint/server";
+
+export async function middleware(
+  request: Request,
+  next: () => Promise<Response>,
+) {
+  try {
+    return await next();
+  } catch (error) {
+    // Log all errors
+    console.error("Unhandled error:", error);
+
+    // Convert StatusErrors to status pages
+    if (error instanceof StatusError) {
+      return statusResponse(error.statusCode, error.message);
+    }
+
+    // For unexpected errors, return a 500
+    return statusResponse(500, "An unexpected error occurred.");
+  }
+}
+```
+
+## Development vs. Production
+
+In development, Catmint shows a detailed error overlay with the stack trace, source code location, and error message. In production, errors are handled by your `error.tsx` files and status pages. Error details are never exposed to end users in production.
+
+| Behavior                | Development                           | Production                                   |
+| ----------------------- | ------------------------------------- | -------------------------------------------- |
+| Render errors           | Error overlay with stack trace        | Nearest `error.tsx`                          |
+| Unhandled server errors | Detailed error in console and overlay | `500.tsx` status page                        |
+| Server function errors  | Full error message sent to client     | Generic message (details logged server-side) |
+
+## Complete Example
+
+Here is a full example combining multiple error handling strategies:
+
+```tsx
+// app/projects/[id]/page.tsx
+import { useParams } from "catmint/hooks";
+import { ErrorBoundary } from "catmint/error";
+import { ProjectDetails } from "./project-details.client";
+import { ActivityFeed } from "./activity-feed.client";
+
+export default function ProjectPage() {
+  const { id } = useParams<{ id: string }>();
+
+  return (
+    <div>
+      <h1>Project {id}</h1>
+
+      {/* If ProjectDetails throws, only this section shows an error */}
+      <ErrorBoundary
+        fallback={({ error, reset }) => (
+          <div>
+            <p>Failed to load project details.</p>
+            <button onClick={reset}>Retry</button>
+          </div>
+        )}
+      >
+        <ProjectDetails projectId={id} />
+      </ErrorBoundary>
+
+      {/* ActivityFeed errors are isolated too */}
+      <ErrorBoundary
+        fallback={({ error }) => <p>Activity feed is unavailable.</p>}
+      >
+        <ActivityFeed projectId={id} />
+      </ErrorBoundary>
+    </div>
+  );
+}
+```
+
+```tsx
+// app/projects/[id]/error.tsx
+// "use client" is auto-injected by Catmint for error.tsx files
+// Catches any error not caught by an ErrorBoundary within the page
+
+export default function ProjectError({
+  error,
+  reset,
+}: {
+  error: Error;
+  reset: () => void;
+}) {
+  return (
+    <div>
+      <h2>Project Error</h2>
+      <p>Something went wrong loading this project.</p>
+      <pre>{error.message}</pre>
+      <button onClick={reset}>Try again</button>
+    </div>
+  );
+}
+```
+
+## Summary
+
+| Mechanism          | Use Case                                         |
+| ------------------ | ------------------------------------------------ |
+| `error.tsx`        | Route-level error boundary with reset capability |
+| `<ErrorBoundary>`  | Component-level error isolation within a page    |
+| `StatusError`      | Throw HTTP errors that render status pages       |
+| `statusResponse()` | Return status page responses without throwing    |
+| `try/catch`        | Handle expected failures in server functions     |
+| Middleware catch   | Global error logging and transformation          |
+
+[Next: Status Pages →](/framework/guides/status-pages)

@@ -1,0 +1,92 @@
+# createLayer
+
+Create a new virtual filesystem layer with copy-on-write semantics over a backing filesystem.
+
+## Import
+
+```ts
+import { createLayer } from "@catmint-fs/core";
+```
+
+## Signature
+
+```ts
+function createLayer(options: CreateLayerOptions): Layer;
+```
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `options` | `CreateLayerOptions` | Yes | Configuration for the layer |
+
+### CreateLayerOptions
+
+```ts
+interface CreateLayerOptions {
+  root: string;
+  adapter?: FsAdapter;
+}
+```
+
+| Field | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `root` | `string` | Yes | — | Absolute path for the layer root. All paths are resolved relative to this root. |
+| `adapter` | `FsAdapter` | No | `LocalAdapter` | The backing filesystem adapter. Defaults to `LocalAdapter` (Node.js only). |
+
+## Return Value
+
+Returns a `Layer` instance. The layer provides a POSIX-like API for reading and writing files, with all mutations held in an in-memory overlay until `apply()` is called.
+
+## Examples
+
+### Default adapter (Node.js)
+
+```ts
+import { createLayer } from "@catmint-fs/core";
+
+const layer = createLayer({ root: "/path/to/project" });
+
+const data = await layer.readFile("/package.json");
+console.log(new TextDecoder().decode(data));
+
+layer.dispose();
+```
+
+### Custom adapter
+
+```ts
+import { createLayer } from "@catmint-fs/core";
+import { SqliteAdapter } from "@catmint-fs/sqlite-adapter";
+
+const adapter = new SqliteAdapter({ database: "fs.db" });
+const layer = createLayer({ root: "/", adapter });
+
+await layer.writeFile("/hello.txt", new TextEncoder().encode("Hello!"));
+await layer.apply();
+
+layer.dispose();
+```
+
+### With the LocalAdapter explicitly
+
+```ts
+import { createLayer, LocalAdapter } from "@catmint-fs/core";
+
+const adapter = new LocalAdapter();
+const layer = createLayer({ root: "/tmp/sandbox", adapter });
+```
+
+## Behavior
+
+- The `root` path must be absolute. A relative path will throw an error.
+- If `adapter` is omitted, a new `LocalAdapter` instance is created automatically. This requires a Node.js environment.
+- If the adapter implements an `initialize(root)` method, it is called during layer creation with the configured root path.
+- Case sensitivity is detected at creation time via `adapter.capabilities().caseSensitive`.
+
+## See Also
+
+- [Layer](/fs/core/api/layer) — all methods available on the returned layer
+- [FsAdapter](/fs/core/api/fs-adapter) — the adapter interface
+- [LocalAdapter](/fs/core/api/local-adapter) — the default adapter
+- [Layers guide](/fs/core/guides/layers) — layer concepts and lifecycle

@@ -1,0 +1,70 @@
+# Overview
+
+`@catmint-fs/core` is a virtual filesystem layer with copy-on-write semantics. It sits between your application code and a backing filesystem, intercepting all read and write operations. Writes are captured in an in-memory overlay while reads fall through to the underlying adapter when no overlay entry exists.
+
+This design lets you stage a set of filesystem changes, inspect them, and then atomically apply or discard them — without touching the real filesystem until you are ready.
+
+## Key Concepts
+
+### Layers
+
+A **layer** is the central abstraction. It wraps a root directory and provides a POSIX-like API (`readFile`, `writeFile`, `mkdir`, `stat`, etc.) that operates on a virtual view of the filesystem. All mutations are held in the layer's overlay until you call `apply()`.
+
+### Copy-on-Write
+
+When you write a file through a layer, the data is stored in memory. Subsequent reads return the in-memory version. The backing filesystem is never modified until you explicitly apply the changes. This makes it safe to experiment with filesystem mutations and roll them back with `reset()`.
+
+### Adapters
+
+The backing filesystem is abstracted behind the `FsAdapter` interface. The built-in `LocalAdapter` uses Node.js `fs` APIs to interact with the local disk, but you can swap in any adapter — an in-memory store, an SQLite-backed filesystem, a remote API, or anything else that implements the interface.
+
+## Architecture
+
+```text
+┌─────────────────────────────────┐
+│         Application Code        │
+├─────────────────────────────────┤
+│           Layer (COW)           │
+│   ┌───────────┬───────────┐     │
+│   │  Overlay  │  Fallback │     │
+│   │ (in-mem)  │ (adapter) │     │
+│   └───────────┴───────────┘     │
+├─────────────────────────────────┤
+│     FsAdapter (pluggable)       │
+│  ┌────────┬──────────┬───────┐  │
+│  │ Local  │  SQLite  │ Custom│  │
+│  └────────┴──────────┴───────┘  │
+└─────────────────────────────────┘
+```
+
+Reads check the overlay first. If the path has been written, deleted, or renamed in the layer, the overlay answers the request. Otherwise, the request passes through to the adapter.
+
+## Browser Compatibility
+
+The API is designed to work in browser environments. All data is represented as `Uint8Array` (not Node.js `Buffer`) and streams use the standard `ReadableStream<Uint8Array>` (not Node.js `Readable`). The built-in `LocalAdapter` requires Node.js, but custom adapters can target any runtime.
+
+## Features
+
+- **POSIX-like API** — `readFile`, `writeFile`, `mkdir`, `rm`, `stat`, `chmod`, `chown`, `symlink`, `rename`, and more
+- **Copy-on-write** — mutations are held in memory until explicitly applied
+- **Change tracking** — inspect pending changes with `getChanges()` and `getChangeDetail()`
+- **Atomic apply** — write changes to the backing store in best-effort or transactional mode
+- **Pluggable adapters** — swap the backing filesystem without changing application code
+- **Permission enforcement** — optional `chmod`/`chown` support depending on adapter capabilities
+- **Symlink support** — create, read, and resolve symbolic links through the layer
+
+## Ecosystem
+
+`@catmint-fs/core` is the foundation of the Catmint filesystem packages:
+
+| Package | Description |
+| --- | --- |
+| [`@catmint-fs/core`](/fs/core/overview) | Virtual filesystem layer with copy-on-write semantics |
+| [`@catmint-fs/sqlite-adapter`](/fs/sqlite-adapter/overview) | SQLite-backed adapter for persistent virtual filesystems |
+| [`@catmint-fs/git`](/fs/git/overview) | Git implementation built on top of `@catmint-fs/core` |
+
+## Next Steps
+
+- [Installation](/fs/core/installation) — install the package
+- [Quick Start](/fs/core/quick-start) — create your first layer and start reading and writing files
+- [Layers](/fs/core/guides/layers) — understand the layer lifecycle in depth

@@ -1,0 +1,84 @@
+# Head
+
+Declarative component for setting `<head>` tags. Accepts standard HTML head elements (`<title>`, `<meta>`, `<link>`) as children and manages them in the document head. When a `HeadProvider` is present, it coordinates with the provider; otherwise it applies changes directly to `document.head` on the client.
+
+## Import
+
+```ts
+import { Head } from 'catmint/head'
+```
+
+## Signature
+
+```tsx
+function Head({ children }: HeadProps): ReactNode
+```
+
+## Props
+
+| Prop | Type | Required | Description |
+|------|------|----------|-------------|
+| `children` | `ReactNode` | No | Standard HTML head elements: `<title>`, `<meta>`, `<link>` |
+
+### `HeadProps`
+
+```ts
+interface HeadProps {
+  children?: ReactNode
+}
+```
+
+## Return Value
+
+Returns `null` — the `Head` component does not render any visible output.
+
+## Examples
+
+```tsx
+import { Head } from 'catmint/head'
+
+function MyPage() {
+  return (
+    <>
+      <Head>
+        <title>My Page</title>
+        <meta name="description" content="A description of my page" />
+        <link rel="canonical" href="https://example.com/my-page" />
+      </Head>
+      <main>
+        <h1>My Page</h1>
+      </main>
+    </>
+  )
+}
+```
+
+```tsx
+// Multiple Head components merge their configs
+function Layout({ children }) {
+  return (
+    <>
+      <Head>
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+      </Head>
+      {children}
+    </>
+  )
+}
+
+function Page() {
+  return (
+    <Layout>
+      <Head>
+        <title>Dashboard</title>
+      </Head>
+      <Dashboard />
+    </Layout>
+  )
+}
+```
+
+## See Also
+
+- [useHead](/framework/api/useHead)
+- [generateMetadata](/framework/api/generateMetadata)

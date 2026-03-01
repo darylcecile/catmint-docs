@@ -1,47 +1,63 @@
-# Catmint Framework
+# Catmint
 
-A strongly-typed, full-stack React framework built on Vite. Catmint provides
-file-based routing, React Server Components, server functions, middleware,
-layouts, caching, and deployment adapters — all with first-class TypeScript support.
+Catmint is an ecosystem of TypeScript libraries for building full-stack web applications and developer tooling.
 
-## Features
+## Packages
 
-- **File-based routing** with dynamic segments, catch-all routes, and route groups
-- **React Server Components** with streaming SSR and client hydration
-- **Server functions** via `createServerFn` with automatic client-side fetch compilation
-- **Middleware** with onion-model execution and `inherit: false` boundaries
-- **Layouts** that persist across sibling navigation with nested layout chains
-- **Caching** with `cachedRoute`, `staticRoute`, and cache invalidation
-- **API endpoints** with HTTP method handlers and typed parameters
-- **Environment variables** with build-time enforcement of server/client boundaries
-- **Head & metadata** via `<Head>` component and `generateMetadata` export
-- **Error handling** with `ErrorBoundary`, status pages, and `statusResponse()`
-- **Forms** with progressive enhancement and CSRF protection
-- **Internationalization** with locale detection and routing strategies
-- **Telemetry** via OpenTelemetry with `trace()` and structured logging
-- **Security** with CSP generation, nonce injection, and CSRF tokens
-- **Testing utilities** for pages, server functions, endpoints, and middleware
-- **Deployment adapters** for Node.js, Vercel, and Cloudflare Workers
+### Catmint Framework
 
-## Quick Start
+A strongly-typed, full-stack React framework built on Vite. File-based routing, React Server Components, server functions, middleware, layouts, caching, and deployment adapters -- all with first-class TypeScript support.
 
 ```sh
-# Create a new project
 pnpm create catmint my-app
-
-# Navigate to project
-cd my-app
-
-# Start development server
-pnpm dev
 ```
 
-## Modes
+[Framework documentation →](/framework)
 
-| Mode | Description | Output |
-| --- | --- | --- |
-| `fullstack` | Pages + API endpoints + server functions | Server bundle + client assets |
-| `frontend` | Static pages only, no server runtime | Static HTML/JS/CSS |
-| `backend` | API endpoints only, no page rendering | Server bundle only |
+---
 
-[Get started with the installation guide →](/getting-started/installation)
+### @catmint-fs/core
+
+A copy-on-write virtual filesystem layer with pluggable adapters. Reads fall through to the backing store; writes are captured in memory until explicitly applied or discarded. Browser-compatible API using `Uint8Array` and `ReadableStream`.
+
+```sh
+pnpm add @catmint-fs/core
+```
+
+[Core documentation →](/fs/core/overview)
+
+---
+
+### @catmint-fs/git
+
+Programmatic git operations in pure TypeScript -- no native dependencies. Init, commit, branch, merge, diff, stash, fetch, push, clone. Works with any `@catmint-fs/core` adapter and produces repositories fully compatible with the `git` CLI.
+
+```sh
+pnpm add @catmint-fs/git @catmint-fs/core
+```
+
+[Git documentation →](/fs/git/overview)
+
+---
+
+### @catmint-fs/sqlite-adapter
+
+SQLite-backed `FsAdapter` for `@catmint-fs/core`. Stores files, directories, symlinks, and permissions in a single SQLite database. Ideal for embedded, portable, or in-memory virtual filesystems.
+
+```sh
+pnpm add @catmint-fs/sqlite-adapter @catmint-fs/core
+```
+
+[SQLite adapter documentation →](/fs/sqlite-adapter/overview)
+
+---
+
+### @catmint-fs/git-auth-node
+
+Node.js credential helper integration for `@catmint-fs/git`. Resolves, stores, and ejects credentials using the system's configured git credential helpers (macOS Keychain, Windows Credential Manager, etc.).
+
+```sh
+pnpm add @catmint-fs/git-auth-node @catmint-fs/git
+```
+
+[Git auth documentation →](/fs/git-auth-node/overview)

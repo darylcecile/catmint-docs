@@ -1,0 +1,120 @@
+# Permissions
+
+`@catmint-fs/core` supports POSIX-style file permissions through `chmod`, `chown`, and `lchown`. Permission support depends on the adapter's capabilities — adapters that do not support permissions will throw when these methods are called.
+
+## Checking Adapter Capabilities
+
+Before using permission APIs, check whether the adapter supports them:
+
+```ts
+import { createLayer, LocalAdapter } from "@catmint-fs/core";
+
+const adapter = new LocalAdapter();
+console.log(adapter.capabilities().permissions); // true
+
+const layer = createLayer({ root: "/path/to/project", adapter });
+```
+
+The built-in `LocalAdapter` supports permissions on systems that have POSIX file permission semantics (Linux, macOS). On Windows, permission operations may have limited effect.
+
+## chmod
+
+Change the permission mode of a file or directory:
+
+```ts
+// Make a file executable
+await layer.chmod("/scripts/build.sh", 0o755);
+
+// Make a file read-only
+await layer.chmod("/config/secrets.json", 0o444);
+
+// Standard permission modes
+await layer.chmod("/src/index.ts", 0o644); // rw-r--r--
+```
+
+Permission modes use the standard octal notation:
+
+| Mode | Meaning |
+| --- | --- |
+| `0o755` | Owner: rwx, Group: r-x, Others: r-x |
+| `0o644` | Owner: rw-, Group: r--, Others: r-- |
+| `0o444` | Everyone: r-- (read-only) |
+| `0o700` | Owner: rwx, Group: ---, Others: --- |
+| `0o600` | Owner: rw-, Group: ---, Others: --- |
+
+## chown
+
+Change the owner and group of a file or directory:
+
+```ts
+// Change owner to uid 1000, group to gid 1000
+await layer.chown("/data/file.txt", 1000, 1000);
+```
+
+## lchown
+
+Change the owner and group of a symbolic link itself, without following the link:
+
+```ts
+await layer.lchown("/link-to-file", 1000, 1000);
+```
+
+This is distinct from `chown`, which follows symlinks and changes the ownership of the target file.
+
+## getOwner
+
+Retrieve the current owner information for a path:
+
+```ts
+const owner = await layer.getOwner("/data/file.txt");
+console.log(owner.uid, owner.gid);
+```
+
+## Permission Changes as Tracked Changes
+
+Permission changes are tracked like any other mutation. They appear in `getChanges()` and `getChangeDetail()`:
+
+```ts
+await layer.chmod("/script.sh", 0o755);
+
+const changes = layer.getChanges();
+// [{ type: "chmod", path: "/script.sh", entryType: "file" }]
+
+const detail = layer.getChangeDetail("/script.sh");
+// { type: "chmod", path: "/script.sh", entryType: "file", mode: 0o755 }
+```
+
+## Permission Checking
+
+Adapters implement `checkPermission(path, op)` to validate whether an operation is permitted. The layer calls this internally before performing reads and writes. The `PermissionOp` type defines the possible operations:
+
+```ts
+type PermissionOp = "read" | "write" | "execute";
+```
+
+If a permission check fails, the adapter throws an error. This behavior is adapter-specific — `LocalAdapter` delegates to the OS, while custom adapters can implement any permission model.
+
+## Apply Ordering
+
+Permission changes (`chmod` and `chown`) are applied after file creates, updates, and renames but before deletes. This ensures the target file exists in its final location before its permissions are modified. See [Applying Changes](/fs/core/guides/applying-changes) for the full ordering.
+
+## Adapters Without Permission Support
+
+If an adapter's `capabilities().permissions` is `false`, calling `chmod`, `chown`, or `lchown` on the layer will throw:
+
+```ts
+// An adapter that doesn't support permissions
+const layer = createLayer({ root: "/", adapter: noPermAdapter });
+
+await layer.chmod("/file.txt", 0o755);
+// Error: Adapter does not support permissions
+```
+
+When building a [custom adapter](/fs/core/guides/custom-adapters), set `permissions: false` in `capabilities()` if your storage backend has no concept of file permissions.
+
+## See Also
+
+- [Layer API](/fs/core/api/layer) — `chmod`, `chown`, `lchown`, `getOwner` references
+- [FsAdapter API](/fs/core/api/fs-adapter) — `checkPermission` and `capabilities` references
+- [Types](/fs/core/api/types) — `PermissionOp` type definition
+- [Applying Changes](/fs/core/guides/applying-changes) — apply ordering for permission changes

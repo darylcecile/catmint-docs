@@ -1,0 +1,202 @@
+# SqliteAdapter
+
+The main class exported by `@catmint-fs/sqlite-adapter`. Implements the `FsAdapter` interface from `@catmint-fs/core`, storing all filesystem state in a SQLite database.
+
+## Import
+
+```typescript
+import { SqliteAdapter } from "@catmint-fs/sqlite-adapter";
+```
+
+## Constructor
+
+```typescript
+new SqliteAdapter(options: SqliteAdapterOptions)
+```
+
+### Parameters
+
+| Parameter              | Type      | Required | Description                                                                 |
+| ---------------------- | --------- | -------- | --------------------------------------------------------------------------- |
+| `options.database`     | `string`  | Yes      | Path to the SQLite database file, or `":memory:"` for an in-memory database. |
+| `options.caseSensitive` | `boolean` | No       | Whether path matching is case-sensitive. Default: `true`.                   |
+
+### Example
+
+```typescript
+// In-memory, case-sensitive (default)
+const adapter = new SqliteAdapter({ database: ":memory:" });
+
+// On-disk, case-insensitive
+const adapter = new SqliteAdapter({
+  database: "./project.sqlite",
+  caseSensitive: false,
+});
+```
+
+## Properties
+
+### capabilities
+
+```typescript
+get capabilities(): FsCapabilities
+```
+
+Returns the adapter's capability flags.
+
+```typescript
+{
+  permissions: true,
+  symlinks: true,
+  caseSensitive: boolean // matches the constructor option
+}
+```
+
+## Methods
+
+In addition to all methods required by the `FsAdapter` interface (see [@catmint-fs/core](/fs/core/overview)), `SqliteAdapter` provides the following:
+
+### importFrom
+
+```typescript
+importFrom(sourcePath: string): Promise<void>
+```
+
+Recursively imports all files, directories, and symlinks from a directory on the host filesystem into the SQLite database. Runs inside a single transaction.
+
+| Parameter    | Type     | Required | Description                          |
+| ------------ | -------- | -------- | ------------------------------------ |
+| `sourcePath` | `string` | Yes      | Absolute or relative path to the source directory on disk. |
+
+```typescript
+await adapter.importFrom("./my-project");
+```
+
+### exportTo
+
+```typescript
+exportTo(destPath: string): Promise<void>
+```
+
+Writes the entire virtual filesystem tree to a directory on disk. Creates the destination directory if it does not exist. Restores symlinks and file permissions.
+
+| Parameter  | Type     | Required | Description                           |
+| ---------- | -------- | -------- | ------------------------------------- |
+| `destPath` | `string` | Yes      | Absolute or relative path to the destination directory. |
+
+```typescript
+await adapter.exportTo("./output");
+```
+
+### close
+
+```typescript
+close(): Promise<void>
+```
+
+Closes the underlying SQLite database connection and releases any file locks. The adapter should not be used after calling `close()`.
+
+```typescript
+await adapter.close();
+```
+
+### getDatabase
+
+```typescript
+getDatabase(): Database
+```
+
+Returns the underlying [better-sqlite3 `Database`](https://github.com/WiseLibs/better-sqlite3/blob/master/docs/api.md) instance. Use this for direct SQL queries, custom transactions, or advanced operations not covered by the `FsAdapter` interface.
+
+```typescript
+const db = adapter.getDatabase();
+
+const files = db
+  .prepare("SELECT path FROM files WHERE type = 'file'")
+  .all();
+```
+
+## Standalone Helpers
+
+The package also exports standalone functions that operate on a bare better-sqlite3 `Database` instance, without requiring a `SqliteAdapter`:
+
+### initializeSchema
+
+```typescript
+import { initializeSchema } from "@catmint-fs/sqlite-adapter";
+```
+
+```typescript
+function initializeSchema(db: Database): void
+```
+
+Creates the `files` and `metadata` tables if they do not already exist. Called automatically by the `SqliteAdapter` constructor.
+
+| Parameter | Type       | Required | Description                      |
+| --------- | ---------- | -------- | -------------------------------- |
+| `db`      | `Database` | Yes      | A better-sqlite3 `Database` instance. |
+
+### importFrom (standalone)
+
+```typescript
+import { importFrom } from "@catmint-fs/sqlite-adapter";
+```
+
+```typescript
+function importFrom(db: Database, sourcePath: string): Promise<void>
+```
+
+Same behavior as `SqliteAdapter.importFrom`, but operates on a `Database` directly.
+
+| Parameter    | Type       | Required | Description                          |
+| ------------ | ---------- | -------- | ------------------------------------ |
+| `db`         | `Database` | Yes      | A better-sqlite3 `Database` instance. |
+| `sourcePath` | `string`   | Yes      | Path to the source directory on disk. |
+
+### exportTo (standalone)
+
+```typescript
+import { exportTo } from "@catmint-fs/sqlite-adapter";
+```
+
+```typescript
+function exportTo(db: Database, destPath: string): Promise<void>
+```
+
+Same behavior as `SqliteAdapter.exportTo`, but operates on a `Database` directly.
+
+| Parameter  | Type       | Required | Description                           |
+| ---------- | ---------- | -------- | ------------------------------------- |
+| `db`       | `Database` | Yes      | A better-sqlite3 `Database` instance. |
+| `destPath` | `string`   | Yes      | Path to the destination directory.     |
+
+## Full Example
+
+```typescript
+import { SqliteAdapter } from "@catmint-fs/sqlite-adapter";
+import { CatmintFs } from "@catmint-fs/core";
+
+const adapter = new SqliteAdapter({ database: "./project.sqlite" });
+const fs = new CatmintFs(adapter);
+
+// Import a real project
+await adapter.importFrom("./my-app");
+
+// Work with the virtual filesystem
+const entries = await fs.readdir("/src");
+const content = await fs.readFile("/src/index.ts", "utf8");
+await fs.writeFile("/src/index.ts", content.replace("v1", "v2"));
+
+// Export the modified tree
+await adapter.exportTo("./my-app-modified");
+
+// Clean up
+await adapter.close();
+```
+
+## See Also
+
+- [Types Reference](/fs/sqlite-adapter/api/types)
+- [Schema Reference](/fs/sqlite-adapter/guides/schema)
+- [Import/Export Guide](/fs/sqlite-adapter/guides/import-export)
+- [@catmint-fs/core Overview](/fs/core/overview)

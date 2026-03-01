@@ -1,0 +1,88 @@
+# useNavigation
+
+Provides programmatic client-side navigation and navigation state. Use this hook to navigate between pages, go back/forward in history, reload, and track whether a navigation is in progress.
+
+## Import
+
+```ts
+import { useNavigation } from "catmint/hooks";
+```
+
+## Signature
+
+```ts
+function useNavigation(): NavigationState;
+```
+
+```ts
+interface NavigationState {
+  navigate: (url: string, opts?: NavigateOptions) => void;
+  back: () => void;
+  forward: () => void;
+  reload: (hard?: boolean) => void;
+  state: "idle" | "loading" | "submitting";
+}
+
+interface NavigateOptions {
+  replace?: boolean;
+  scroll?: boolean;
+}
+```
+
+## Return Value
+
+| Property   | Type                                            | Description                                                                                                                                            |
+| ---------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `navigate` | `(url: string, opts?: NavigateOptions) => void` | Navigate to a URL. Pass `{ replace: true }` to replace the current history entry, or `{ scroll: false }` to prevent scrolling to top.                  |
+| `back`     | `() => void`                                    | Navigate back one entry in the browser history.                                                                                                        |
+| `forward`  | `() => void`                                    | Navigate forward one entry in the browser history.                                                                                                     |
+| `reload`   | `(hard?: boolean) => void`                      | Reload the current page. Pass `true` for a full page reload instead of a client-side refresh.                                                          |
+| `state`    | `'idle' \| 'loading' \| 'submitting'`           | The current navigation state. `'idle'` when no navigation is happening, `'loading'` during a page transition, `'submitting'` during a form submission. |
+
+## Examples
+
+### Basic navigation
+
+```tsx
+// NavButtons.client.tsx
+import { useNavigation } from "catmint/hooks";
+
+function NavButtons() {
+  const { navigate, back, state } = useNavigation();
+
+  return (
+    <div>
+      <button onClick={() => back()}>Go Back</button>
+      <button onClick={() => navigate("/dashboard")}>Dashboard</button>
+      {state === "loading" && <span>Loading...</span>}
+    </div>
+  );
+}
+```
+
+### Replace history entry
+
+```tsx
+const { navigate } = useNavigation();
+
+// Replace instead of push — useful after login redirects
+navigate("/home", { replace: true });
+```
+
+### Reload without scroll
+
+```tsx
+const { reload } = useNavigation();
+
+// Soft reload (client-side refresh)
+reload();
+
+// Hard reload (full page reload)
+reload(true);
+```
+
+## See Also
+
+- [useParams](/framework/api/useParams)
+- [useSearch](/framework/api/useSearch)
+- [useRouteData](/framework/api/useRouteData)

@@ -1,0 +1,231 @@
+# Status Pages
+
+Catmint provides a convention-based system for rendering custom error and status pages. You can define pages for any HTTP status code using simple file conventions, and trigger them programmatically with `statusResponse` and `StatusError`.
+
+## File Conventions
+
+Status pages are React components placed in the `app/` root directory, named after the HTTP status code they handle:
+
+```txt
+app/
+  404.tsx     # Not Found
+  500.tsx     # Internal Server Error
+  403.tsx     # Forbidden
+  503.tsx     # Service Unavailable
+```
+
+The two most common status pages are `404.tsx` and `500.tsx`. Catmint provides sensible default pages for these if you do not define your own. For any other status code, you must create the file explicitly.
+
+### 404.tsx -- Not Found
+
+Rendered automatically when no route matches the requested URL. Also rendered when you trigger a 404 programmatically.
+
+```tsx
+// app/404.tsx
+export default function NotFoundPage({
+  status,
+  message,
+}: {
+  status: number
+  message: string
+}) {
+  return (
+    <div>
+      <h1>404</h1>
+      <p>{message || 'The page you are looking for does not exist.'}</p>
+      <a href="/">Go home</a>
+    </div>
+  )
+}
+```
+
+### 500.tsx -- Internal Server Error
+
+Rendered when an unhandled error occurs during server-side rendering or in a server function. In development, Catmint shows a detailed error overlay instead.
+
+```tsx
+// app/500.tsx
+export default function ServerErrorPage({
+  status,
+  message,
+}: {
+  status: number
+  message: string
+}) {
+  return (
+    <div>
+      <h1>Something went wrong</h1>
+      <p>{message || 'An unexpected error occurred. Please try again later.'}</p>
+    </div>
+  )
+}
+```
+
+## Status Page Props
+
+Every status page component receives the following props:
+
+| Prop | Type | Description |
+| --- | --- | --- |
+| `status` | `number` | The HTTP status code (e.g. 404, 500, 403) |
+| `message` | `string` | An optional message describing the error. May be empty. |
+
+## Triggering Status Pages Programmatically
+
+### statusResponse(code)
+
+The `statusResponse` function creates a `Response` object with the given status code and renders the corresponding status page. Use it in middleware, endpoints, and server functions.
+
+```ts
+// app/middleware.ts
+import { statusResponse } from 'catmint/server'
+
+export async function middleware(request: Request, next: () => Promise<Response>) {
+  const user = await getUser(request)
+
+  if (!user) {
+    return statusResponse(403, 'You do not have access to this resource.')
+  }
+
+  return next()
+}
+```
+
+```ts
+// app/blog/[slug]/page.tsx
+import { statusResponse } from 'catmint/server'
+
+export async function loader({ params }: { params: { slug: string } }) {
+  const post = await getPost(params.slug)
+
+  if (!post) {
+    return statusResponse(404, 'Blog post not found.')
+  }
+
+  return { post }
+}
+```
+
+### StatusError class
+
+The `StatusError` class is an `Error` subclass that carries a status code. When thrown, Catmint catches it and renders the corresponding status page. This is useful when you want to bail out of deeply nested logic without manually threading a Response back up.
+
+```ts
+import { StatusError } from 'catmint/server'
+
+async function requireAuth(request: Request) {
+  const session = await getSession(request)
+  if (!session) {
+    throw new StatusError(401, 'Authentication required.')
+  }
+  if (session.role !== 'admin') {
+    throw new StatusError(403, 'Insufficient permissions.')
+  }
+  return session
+}
+```
+
+The `StatusError` constructor accepts two arguments:
+
+```ts
+new StatusError(statusCode: number, message?: string)
+```
+
+## Custom Status Pages
+
+You can create a status page for any HTTP status code by adding a file named with that code. For example, a 403 Forbidden page:
+
+```tsx
+// app/403.tsx
+export default function ForbiddenPage({
+  status,
+  message,
+}: {
+  status: number
+  message: string
+}) {
+  return (
+    <div>
+      <h1>Access Denied</h1>
+      <p>{message || 'You do not have permission to view this page.'}</p>
+      <a href="/">Return to homepage</a>
+    </div>
+  )
+}
+```
+
+A 503 Service Unavailable page for maintenance windows:
+
+```tsx
+// app/503.tsx
+export default function MaintenancePage({
+  status,
+  message,
+}: {
+  status: number
+  message: string
+}) {
+  return (
+    <div>
+      <h1>Under Maintenance</h1>
+      <p>{message || 'We are performing scheduled maintenance. Please check back soon.'}</p>
+    </div>
+  )
+}
+```
+
+## resolveStatusPage
+
+Under the hood, Catmint uses the `resolveStatusPage` function to find the correct status page component for a given code. The resolution follows this order:
+
+1. Look for `app/[code].tsx` (e.g. `app/403.tsx`)
+2. Fall back to the built-in Catmint default for 404 and 500
+3. For any other code without a custom page, render a minimal fallback with the status code and message
+
+```ts
+import { resolveStatusPage } from 'catmint/server'
+
+// Internal usage -- you typically do not call this directly
+const PageComponent = await resolveStatusPage(403, appDir)
+// Returns the default export from app/403.tsx, or the fallback
+```
+
+## Usage in Middleware
+
+Status pages integrate naturally with middleware. A common pattern is to check authentication or feature flags and return status responses:
+
+```ts
+// app/(admin)/middleware.ts
+import { statusResponse } from 'catmint/server'
+
+export async function middleware(request: Request, next: () => Promise<Response>) {
+  const session = await getSession(request)
+
+  if (!session) {
+    return statusResponse(401, 'Please sign in to continue.')
+  }
+
+  if (session.role !== 'admin') {
+    return statusResponse(403, 'Admin access required.')
+  }
+
+  const isMaintenanceMode = await getFeatureFlag('maintenance')
+  if (isMaintenanceMode) {
+    return statusResponse(503, 'The admin panel is temporarily unavailable.')
+  }
+
+  return next()
+}
+```
+
+## Summary
+
+| API | Purpose |
+| --- | --- |
+| `404.tsx` / `500.tsx` | File conventions for custom status pages |
+| `statusResponse(code, message?)` | Returns a Response that triggers the status page |
+| `StatusError` | Throwable error class with HTTP status code |
+| `resolveStatusPage(code, appDir)` | Internal resolution of status page components |
+| `{ status, message }` | Props received by all status page components |
+
+[Next: Error Handling →](/framework/guides/error-handling)

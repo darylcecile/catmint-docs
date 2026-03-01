@@ -1,0 +1,92 @@
+# initRepository
+
+Create a new git repository on a [@catmint-fs/core](/fs/core/overview) layer. This is equivalent to running `git init`.
+
+## Import
+
+```typescript
+import { initRepository } from "@catmint-fs/git";
+```
+
+## Signature
+
+```typescript
+function initRepository(
+  layer: Layer,
+  options?: InitRepositoryOptions,
+): Promise<Repository>;
+```
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `layer` | `Layer` | Yes | A [@catmint-fs/core](/fs/core/overview) layer to store the repository |
+| `options` | `InitRepositoryOptions` | No | Configuration for the new repository |
+
+### `InitRepositoryOptions`
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `defaultBranch` | `string` | `"main"` | Name of the initial branch |
+| `bare` | `boolean` | `false` | Create a bare repository (no working tree) |
+
+## Return Value
+
+Returns a `Promise<Repository>` — a [Repository](/fs/git/api/repository) instance with the full API for git operations.
+
+The promise resolves after the `.git` directory structure has been written to the layer, including `HEAD`, `refs/`, `objects/`, and `config`.
+
+## Examples
+
+### Basic Initialization
+
+```typescript
+import { createMemoryLayer } from "@catmint-fs/core";
+import { initRepository } from "@catmint-fs/git";
+
+const layer = createMemoryLayer();
+const repo = await initRepository(layer);
+
+console.log(await repo.currentBranch()); // "main"
+```
+
+### Custom Default Branch
+
+```typescript
+const repo = await initRepository(layer, { defaultBranch: "trunk" });
+console.log(await repo.currentBranch()); // "trunk"
+```
+
+### Bare Repository
+
+```typescript
+const repo = await initRepository(layer, { bare: true });
+```
+
+### With a Node.js Filesystem Layer
+
+```typescript
+import { createNodeLayer } from "@catmint-fs/core";
+import { initRepository } from "@catmint-fs/git";
+
+const layer = createNodeLayer("/path/to/project");
+const repo = await initRepository(layer);
+```
+
+### With a SQLite Layer
+
+```typescript
+import { createSqliteLayer } from "@catmint-fs/sqlite-adapter";
+import { initRepository } from "@catmint-fs/git";
+
+const layer = createSqliteLayer("repo.db");
+const repo = await initRepository(layer);
+```
+
+## See Also
+
+- [openRepository](/fs/git/api/openRepository)
+- [cloneRepository](/fs/git/api/cloneRepository)
+- [Repository API](/fs/git/api/repository)
+- [Repositories Guide](/fs/git/guides/repositories)

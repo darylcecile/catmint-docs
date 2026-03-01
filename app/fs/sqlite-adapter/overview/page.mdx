@@ -1,0 +1,47 @@
+# @catmint-fs/sqlite-adapter
+
+A SQLite-backed `FsAdapter` for [@catmint-fs/core](/fs/core/overview). Stores all filesystem state -- files, directories, symlinks, permissions, and metadata -- in a single SQLite database using [better-sqlite3](https://github.com/WiseLibs/better-sqlite3).
+
+## Why SQLite?
+
+Traditional in-memory filesystem implementations lose their state when the process exits. A SQLite-backed adapter gives you persistence without the complexity of a real filesystem, and can operate either in-memory or on disk:
+
+- **Portable snapshots** -- A single `.sqlite` file contains an entire filesystem tree. Copy it, version it, or ship it across machines.
+- **Transactional writes** -- All mutations happen inside SQLite transactions, so the filesystem is always in a consistent state.
+- **Fast bulk operations** -- Import thousands of files from disk in a single transaction, or export the entire tree back out.
+- **Testable** -- Use `:memory:` databases for fast, isolated test fixtures that require no cleanup.
+
+## Use Cases
+
+- **CI/CD pipelines** -- Capture a filesystem snapshot before and after a build step. Compare or restore snapshots without touching disk.
+- **Git operations** -- Pair with [@catmint-fs/git](/fs/git/overview) to clone repositories into a SQLite database for analysis or transformation.
+- **Testing** -- Create deterministic filesystem fixtures in memory. No temp directories, no cleanup.
+- **Embedded tooling** -- Ship a single SQLite file as a self-contained filesystem image for offline use.
+
+## Features
+
+- Full `FsAdapter` implementation compatible with all `@catmint-fs/core` operations
+- In-memory (`:memory:`) or on-disk database storage
+- Import from and export to real directories on the host filesystem
+- Symlink support
+- Permission enforcement (mode, uid, gid)
+- Case-sensitive or case-insensitive path matching
+- Standalone helper functions for working with the database directly
+
+## Capabilities
+
+The adapter reports the following capabilities to `@catmint-fs/core`:
+
+| Capability      | Value       |
+| --------------- | ----------- |
+| `permissions`   | `true`      |
+| `symlinks`      | `true`      |
+| `caseSensitive` | Configurable (default: `true`) |
+
+## Quick Links
+
+- [Installation](/fs/sqlite-adapter/installation)
+- [Quick Start](/fs/sqlite-adapter/quick-start)
+- [Schema Reference](/fs/sqlite-adapter/guides/schema)
+- [Import/Export Guide](/fs/sqlite-adapter/guides/import-export)
+- [SqliteAdapter API](/fs/sqlite-adapter/api/sqlite-adapter)

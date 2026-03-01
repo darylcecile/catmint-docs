@@ -1,0 +1,75 @@
+# getLocale
+
+Server-side async function that detects and returns the current locale for the active request. Uses a multi-step detection strategy to determine the best locale.
+
+## Import
+
+```ts
+import { getLocale } from 'catmint/i18n'
+```
+
+## Signature
+
+```ts
+function getLocale(): Promise<string>
+```
+
+## Parameters
+
+This function takes no parameters. It reads the locale from the current request context automatically.
+
+## Return Value
+
+Returns a `Promise<string>` resolving to the detected locale (e.g. `'en'`, `'fr'`).
+
+### Detection priority
+
+The locale is determined by checking the following sources in order:
+
+1. **URL locale prefix** -- e.g. `/fr/about` resolves to `'fr'`
+2. **Cookie** -- the `catmint-locale` cookie value
+3. **Accept-Language header** -- parsed and matched against configured locales
+4. **Default locale** -- the `defaultLocale` from your i18n config
+
+If no request context is available (e.g. during static generation), the default locale from your config is returned, falling back to `'en'`.
+
+## Examples
+
+### Server component
+
+```tsx
+import { getLocale } from 'catmint/i18n'
+
+export default async function Page() {
+  const locale = await getLocale()
+
+  return <h1>{locale === 'fr' ? 'Bienvenue' : 'Welcome'}</h1>
+}
+```
+
+### In a server function
+
+```ts
+import { getLocale } from 'catmint/i18n'
+import { createServerFn } from 'catmint'
+
+const getGreeting = createServerFn(async () => {
+  const locale = await getLocale()
+  return locale === 'es' ? 'Hola' : 'Hello'
+})
+```
+
+### In middleware
+
+```ts
+import { getLocale } from 'catmint/i18n'
+
+export async function middleware(request: Request) {
+  const locale = await getLocale()
+  // Use locale for routing decisions
+}
+```
+
+## See Also
+
+- [useLocale](/framework/api/useLocale)

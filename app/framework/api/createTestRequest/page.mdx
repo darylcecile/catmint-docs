@@ -1,0 +1,115 @@
+# createTestRequest
+
+Creates a standard `Request` object for testing endpoints and middleware. Handles URL construction, header setup, and body serialization with sensible defaults.
+
+## Import
+
+```ts
+import { createTestRequest } from 'catmint/testing'
+```
+
+## Signature
+
+```ts
+function createTestRequest(
+  path: string,
+  opts?: TestRequestOptions,
+): Request
+```
+
+```ts
+interface TestRequestOptions {
+  method?: string
+  headers?: Record<string, string>
+  body?: string
+}
+```
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `path` | `string` | Yes | The URL path (e.g. `'/api/users'`). A leading `/` is added if missing. The path is resolved against `http://localhost`. |
+| `opts` | `TestRequestOptions` | No | Request configuration options. |
+
+### TestRequestOptions
+
+| Property | Type | Required | Description |
+|----------|------|----------|-------------|
+| `method` | `string` | No | HTTP method. Defaults to `'GET'`. |
+| `headers` | `Record<string, string>` | No | HTTP headers to include. |
+| `body` | `string` | No | Request body string. Only sent for non-GET/HEAD methods. If the body starts with `{` and no `Content-Type` is set, `application/json` is auto-applied. |
+
+## Return Value
+
+Returns a standard [`Request`](https://developer.mozilla.org/en-US/docs/Web/API/Request) object ready to pass to endpoint handlers, middleware, or other request-processing functions.
+
+## Examples
+
+### GET request
+
+```ts
+import { createTestRequest } from 'catmint/testing'
+
+const req = createTestRequest('/api/users')
+// => GET http://localhost/api/users
+```
+
+### POST with JSON body
+
+```ts
+const req = createTestRequest('/api/users', {
+  method: 'POST',
+  body: JSON.stringify({ name: 'Alice' }),
+})
+
+// Content-Type: application/json is auto-set
+```
+
+### With custom headers
+
+```ts
+const req = createTestRequest('/api/admin', {
+  headers: {
+    'Authorization': 'Bearer token123',
+    'X-Request-Id': 'test-abc',
+  },
+})
+```
+
+### Testing an endpoint handler
+
+```ts
+import { createTestRequest } from 'catmint/testing'
+import { GET } from './api/users/route'
+
+test('GET /api/users returns users', async () => {
+  const req = createTestRequest('/api/users')
+  const response = await GET(req)
+  const data = await response.json()
+
+  expect(response.status).toBe(200)
+  expect(data.users).toHaveLength(3)
+})
+```
+
+### Testing middleware
+
+```ts
+import { createTestRequest } from 'catmint/testing'
+import { authMiddleware } from './middleware'
+
+test('rejects unauthenticated requests', async () => {
+  const req = createTestRequest('/api/protected')
+  const response = await authMiddleware(req, async () => {
+    return new Response('OK')
+  })
+
+  expect(response.status).toBe(401)
+})
+```
+
+## See Also
+
+- [renderPage](/framework/api/renderPage)
+- [mockServerFn](/framework/api/mockServerFn)

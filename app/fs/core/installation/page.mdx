@@ -1,0 +1,68 @@
+# Installation
+
+## Requirements
+
+- **Node.js 20** or later (for the built-in `LocalAdapter`)
+- **TypeScript 5.0** or later (recommended)
+
+The core layer API uses `Uint8Array` and `ReadableStream`, which are available in all modern runtimes including browsers, Deno, and Cloudflare Workers. The built-in `LocalAdapter` depends on Node.js `fs` APIs and is only available in Node.js environments.
+
+## Install
+
+```bash
+npm install @catmint-fs/core
+```
+
+```bash
+pnpm add @catmint-fs/core
+```
+
+```bash
+yarn add @catmint-fs/core
+```
+
+## Optional Adapters
+
+The core package includes `LocalAdapter` for Node.js. For other environments, install a separate adapter:
+
+| Adapter | Package | Install |
+| --- | --- | --- |
+| Local (Node.js) | Built into `@catmint-fs/core` | — |
+| SQLite | `@catmint-fs/sqlite-adapter` | `pnpm add @catmint-fs/sqlite-adapter` |
+
+See the [Adapters](/fs/core/guides/adapters) guide and the [Custom Adapters](/fs/core/guides/custom-adapters) guide for more options.
+
+## TypeScript Configuration
+
+`@catmint-fs/core` ships with full type declarations. No additional `@types` packages are needed. The package targets `ES2022` and uses `"moduleResolution": "bundler"` or `"node16"` style exports. A minimal `tsconfig.json`:
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "skipLibCheck": true
+  }
+}
+```
+
+## Verify the Installation
+
+```ts
+import { createLayer } from "@catmint-fs/core";
+
+const layer = createLayer({ root: "/tmp/test" });
+await layer.writeFile("/hello.txt", new TextEncoder().encode("Hello, world!"));
+
+const data = await layer.readFile("/hello.txt");
+console.log(new TextDecoder().decode(data));
+// "Hello, world!"
+
+layer.dispose();
+```
+
+If this runs without errors, the package is installed correctly.
+
+[Next: Quick Start →](/fs/core/quick-start)

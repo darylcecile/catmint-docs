@@ -1,0 +1,182 @@
+# Project Structure
+
+Catmint uses a convention-based project layout. This page describes the standard directory structure, file naming conventions, and routing patterns.
+
+## Directory Layout
+
+A typical Catmint project has the following top-level structure:
+
+```txt
+my-app/
+  app/                    # Application source (routes, layouts, pages)
+    page.tsx              # Root page (renders at /)
+    layout.tsx            # Root layout (wraps all pages)
+    public/               # Static assets (served as-is)
+      favicon.ico
+      robots.txt
+    about/
+      page.tsx            # Renders at /about
+    blog/
+      page.tsx            # Renders at /blog
+      layout.tsx          # Layout for all /blog/* pages
+      [slug]/
+        page.tsx          # Renders at /blog/:slug
+  catmint.config.ts         # Framework configuration
+  tsconfig.json           # TypeScript configuration
+  package.json
+```
+
+The `app/` directory is the root of your application. All routes, layouts, middleware, and endpoints are defined by the files placed inside it. The `app/public/` directory holds static assets that are served without processing.
+
+## File Conventions
+
+Catmint recognizes specific filenames within the `app/` directory. Each convention serves a distinct role in the framework.
+
+### Core Files
+
+| File | Purpose |
+| --- | --- |
+| `page.tsx` | Defines the UI for a route segment. The default export is a React component rendered when the route matches. |
+| `layout.tsx` | Wraps child pages and nested layouts. Receives a `children` prop. Persists across navigation between sibling routes. |
+| `loading.tsx` | Displayed as a fallback while the page component or its data is loading. Used with streaming SSR and Suspense. |
+| `error.tsx` | Renders when an error occurs within the route segment. Acts as a React error boundary for the segment and its children. |
+| `middleware.ts` | Intercepts requests before they reach the page. Executes using an onion model. Inherited by child routes unless `inherit: false` is set. |
+| `endpoint.ts` | Defines API route handlers. Exports named functions matching HTTP methods (`GET`, `POST`, `PUT`, `DELETE`, etc.). |
+
+### Special Files
+
+| File | Purpose |
+| --- | --- |
+| `404.tsx` | Custom "Not Found" page. Rendered when no route matches the requested URL. Place in the `app/` root. |
+| `500.tsx` | Custom "Internal Server Error" page. Rendered on unhandled server errors. Place in the `app/` root. |
+
+### File Suffixes
+
+Catmint uses file suffixes to control where code runs and how it is bundled:
+
+| Suffix | Behavior |
+| --- | --- |
+| `*.fn.ts` | Server function files. Exports are compiled into RPC endpoints that can be called from client components via `createServerFn`. |
+| `*.server.ts` | Server-only modules. Excluded from the client bundle entirely. Importing from client code will produce a build error. |
+| `*.client.tsx` | Client-only modules. These files are never executed on the server and are hydrated on the client. |
+
+## Routing Patterns
+
+### Static Routes
+
+Each directory inside `app/` that contains a `page.tsx` becomes a route. The path is determined by the directory structure:
+
+```txt
+app/page.tsx             -> /
+app/about/page.tsx       -> /about
+app/blog/page.tsx        -> /blog
+app/settings/page.tsx    -> /settings
+```
+
+### Dynamic Segments
+
+Wrap a directory name in square brackets to create a dynamic segment. The matched value is available via `useParams()` from `catmint/hooks`:
+
+```txt
+app/blog/[slug]/page.tsx          -> /blog/:slug
+app/users/[id]/page.tsx           -> /users/:id
+app/shop/[category]/[item]/page.tsx -> /shop/:category/:item
+```
+
+```tsx
+// app/users/[id]/page.tsx
+import { useParams } from 'catmint/hooks'
+
+export default function UserPage() {
+  const { id } = useParams()
+  return <h1>User {id}</h1>
+}
+```
+
+### Catch-All Segments
+
+Use the spread syntax inside brackets to match any number of path segments:
+
+```txt
+app/docs/[...path]/page.tsx       -> /docs/*
+```
+
+The parameter value will be an array of strings. For example, `/docs/guides/routing/dynamic` results in `path` being `["guides", "routing", "dynamic"]`.
+
+```tsx
+// app/docs/[...path]/page.tsx
+import { useParams } from 'catmint/hooks'
+
+export default function DocsPage() {
+  const { path } = useParams()
+  return <p>Path segments: {path.join(' / ')}</p>
+}
+```
+
+### Optional Catch-All Segments
+
+Double brackets make the catch-all optional, meaning the route also matches the parent path without any additional segments:
+
+```txt
+app/docs/[[...path]]/page.tsx     -> /docs and /docs/*
+```
+
+When accessed at `/docs` with no trailing segments, `path` will be an empty array.
+
+### Route Groups
+
+Directories wrapped in parentheses create route groups. They organize files without adding a segment to the URL path:
+
+```txt
+app/(marketing)/page.tsx          -> /
+app/(marketing)/pricing/page.tsx  -> /pricing
+app/(dashboard)/settings/page.tsx -> /settings
+```
+
+Route groups are useful for applying different layouts to different sections of your application without affecting the URL:
+
+```txt
+app/
+  (marketing)/
+    layout.tsx          # Marketing layout
+    page.tsx            # Renders at /
+    pricing/
+      page.tsx          # Renders at /pricing
+  (dashboard)/
+    layout.tsx          # Dashboard layout (different from marketing)
+    settings/
+      page.tsx          # Renders at /settings
+    profile/
+      page.tsx          # Renders at /profile
+```
+
+## Configuration
+
+The `catmint.config.ts` file at the project root defines framework behavior. It uses the `defineConfig` helper from `catmint/config`:
+
+```ts
+// catmint.config.ts
+import { defineConfig } from 'catmint/config'
+import node from 'catmint-adapter-node'
+
+export default defineConfig({
+  mode: 'fullstack',
+  adapter: node({ port: 3000 }),
+})
+```
+
+The three modes control what Catmint includes in the build:
+
+| Mode | Pages | API Endpoints | Server Functions |
+| --- | --- | --- | --- |
+| `fullstack` | Yes | Yes | Yes |
+| `frontend` | Yes | No | No |
+| `backend` | No | Yes | Yes |
+
+## Next Steps
+
+- [Routing](/framework/guides/routing) -- detailed routing guide with advanced patterns
+- [Layouts](/framework/guides/layouts) -- nested layouts and layout boundaries
+- [Middleware](/framework/guides/middleware) -- request interception and the onion model
+- [API Endpoints](/framework/guides/api-endpoints) -- building HTTP handlers with endpoint files
+- [Server Functions](/framework/guides/server-functions) -- RPC-style server calls from client components

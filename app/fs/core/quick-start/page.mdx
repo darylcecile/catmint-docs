@@ -1,0 +1,149 @@
+# Quick Start
+
+This guide walks you through creating a layer, reading and writing files, inspecting changes, and applying them to the backing filesystem.
+
+## 1. Create a Layer
+
+A layer wraps a root directory and intercepts all filesystem operations. The default adapter is `LocalAdapter`, which reads from the local disk:
+
+```ts
+import { createLayer } from "@catmint-fs/core";
+
+const layer = createLayer({ root: "/path/to/project" });
+```
+
+The `root` path must be absolute. All paths passed to layer methods are resolved relative to this root.
+
+## 2. Read Files
+
+Reading a file that exists on disk works as expected — the request passes through to the adapter:
+
+```ts
+const data = await layer.readFile("/README.md");
+const text = new TextDecoder().decode(data);
+console.log(text);
+```
+
+You can also list directories and check file metadata:
+
+```ts
+const entries = await layer.readdir("/src");
+console.log(entries); // [{ name: "index.ts", type: "file" }, ...]
+
+const info = await layer.stat("/package.json");
+console.log(info.size, info.type); // 1234 "file"
+```
+
+## 3. Write Files
+
+When you write through the layer, the data is captured in memory. The backing filesystem is not modified:
+
+```ts
+const encoder = new TextEncoder();
+
+await layer.writeFile(
+  "/src/config.ts",
+  encoder.encode('export const VERSION = "1.0.0";\n'),
+);
+
+await layer.mkdir("/src/utils");
+
+await layer.writeFile(
+  "/src/utils/helpers.ts",
+  encoder.encode("export function greet(name: string) {\n  return `Hello, ${name}!`;\n}\n"),
+);
+```
+
+Reading a file you have written returns the in-memory version:
+
+```ts
+const config = await layer.readFile("/src/config.ts");
+console.log(new TextDecoder().decode(config));
+// 'export const VERSION = "1.0.0";'
+```
+
+## 4. Inspect Changes
+
+Use `getChanges()` to see all pending modifications:
+
+```ts
+const changes = layer.getChanges();
+
+for (const change of changes) {
+  console.log(`${change.type} ${change.path}`);
+}
+// create /src/config.ts
+// create /src/utils
+// create /src/utils/helpers.ts
+```
+
+For detailed information about a specific change, use `getChangeDetail()`:
+
+```ts
+const detail = layer.getChangeDetail("/src/config.ts");
+console.log(detail);
+// { type: "create", path: "/src/config.ts", entryType: "file" }
+```
+
+## 5. Apply Changes
+
+When you are satisfied with the changes, apply them to the backing filesystem:
+
+```ts
+const result = await layer.apply();
+console.log(result);
+// { applied: 3, errors: [] }
+```
+
+The changes are now written to disk. The layer's overlay is cleared after a successful apply.
+
+## 6. Reset or Dispose
+
+To discard all pending changes without applying them:
+
+```ts
+layer.reset();
+```
+
+When you are done with the layer entirely, dispose of it to release resources:
+
+```ts
+layer.dispose();
+```
+
+## Full Example
+
+```ts
+import { createLayer } from "@catmint-fs/core";
+
+async function main() {
+  const layer = createLayer({ root: "/tmp/my-project" });
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
+
+  // Write some files
+  await layer.mkdir("/src");
+  await layer.writeFile("/src/index.ts", encoder.encode('console.log("hello");\n'));
+  await layer.writeFile("/README.md", encoder.encode("# My Project\n"));
+
+  // Inspect changes
+  const changes = layer.getChanges();
+  console.log(`${changes.length} pending changes`);
+
+  // Apply to disk
+  const result = await layer.apply();
+  console.log(`Applied ${result.applied} changes`);
+
+  // Clean up
+  layer.dispose();
+}
+
+main();
+```
+
+## Next Steps
+
+- [Layers](/fs/core/guides/layers) — layer lifecycle, reading, writing, and disposal
+- [Adapters](/fs/core/guides/adapters) — understand the adapter system and built-in adapters
+- [Change Tracking](/fs/core/guides/change-tracking) — detailed change inspection
+- [Applying Changes](/fs/core/guides/applying-changes) — best-effort vs. transactional mode

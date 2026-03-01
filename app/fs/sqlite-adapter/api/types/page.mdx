@@ -1,0 +1,86 @@
+# Types
+
+Type definitions exported by `@catmint-fs/sqlite-adapter`.
+
+## Import
+
+```typescript
+import type {
+  SqliteAdapterOptions,
+} from "@catmint-fs/sqlite-adapter";
+```
+
+Types from `@catmint-fs/core` that are used throughout the adapter:
+
+```typescript
+import type {
+  FsAdapter,
+  FsCapabilities,
+} from "@catmint-fs/core";
+```
+
+## SqliteAdapterOptions
+
+Configuration object passed to the `SqliteAdapter` constructor.
+
+```typescript
+interface SqliteAdapterOptions {
+  database: string;
+  caseSensitive?: boolean;
+}
+```
+
+| Field           | Type      | Required | Default | Description                                                                 |
+| --------------- | --------- | -------- | ------- | --------------------------------------------------------------------------- |
+| `database`      | `string`  | Yes      | --      | Path to the SQLite database file, or `":memory:"` for an in-memory database. |
+| `caseSensitive` | `boolean` | No       | `true`  | Whether path lookups are case-sensitive.                                     |
+
+### Examples
+
+```typescript
+// In-memory, case-sensitive
+const opts: SqliteAdapterOptions = { database: ":memory:" };
+
+// On-disk, case-insensitive
+const opts: SqliteAdapterOptions = {
+  database: "/tmp/project.sqlite",
+  caseSensitive: false,
+};
+```
+
+## FsAdapter
+
+The adapter interface from `@catmint-fs/core` that `SqliteAdapter` implements. See the [@catmint-fs/core documentation](/fs/core/overview) for the full interface definition.
+
+## FsCapabilities
+
+Returned by `SqliteAdapter.capabilities`. Describes what the adapter supports.
+
+```typescript
+interface FsCapabilities {
+  permissions: boolean;
+  symlinks: boolean;
+  caseSensitive: boolean;
+}
+```
+
+For `SqliteAdapter`, the values are always:
+
+| Field           | Value          |
+| --------------- | -------------- |
+| `permissions`   | `true`         |
+| `symlinks`      | `true`         |
+| `caseSensitive` | Matches constructor option (default: `true`) |
+
+## Database
+
+The `getDatabase()` method returns a `Database` instance from the [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) package. This type is not re-exported by `@catmint-fs/sqlite-adapter` -- import it directly if you need the type:
+
+```typescript
+import type Database from "better-sqlite3";
+```
+
+## See Also
+
+- [SqliteAdapter API](/fs/sqlite-adapter/api/sqlite-adapter)
+- [@catmint-fs/core Overview](/fs/core/overview)

@@ -1,0 +1,108 @@
+# Adapters
+
+Adapters are the bridge between a layer and the underlying storage. The `FsAdapter` interface defines all the operations a backing filesystem must support. By implementing this interface, you can store files anywhere — on disk, in a database, in memory, or on a remote server.
+
+## How Adapters Work
+
+When you create a layer, you provide an adapter (or use the default `LocalAdapter`). The layer delegates all read operations to the adapter when no overlay entry exists. When you call `apply()`, the layer writes all pending changes back through the adapter.
+
+```ts
+import { createLayer } from "@catmint-fs/core";
+
+// Uses LocalAdapter by default
+const layer = createLayer({ root: "/path/to/project" });
+```
+
+```ts
+import { createLayer } from "@catmint-fs/core";
+import { SqliteAdapter } from "@catmint-fs/sqlite-adapter";
+
+// Use a custom adapter
+const adapter = new SqliteAdapter({ database: "fs.db" });
+const layer = createLayer({ root: "/", adapter });
+```
+
+## Built-in LocalAdapter
+
+The `LocalAdapter` is included in `@catmint-fs/core` and uses Node.js `fs` APIs to interact with the local filesystem. It is the default adapter when no adapter is specified.
+
+```ts
+import { LocalAdapter } from "@catmint-fs/core";
+
+const adapter = new LocalAdapter();
+const layer = createLayer({ root: "/path/to/project", adapter });
+```
+
+`LocalAdapter` is only available in Node.js environments. It is not compatible with browsers, Deno, or Cloudflare Workers.
+
+### LocalAdapter Capabilities
+
+```ts
+adapter.capabilities();
+// {
+//   permissions: true,   // chmod/chown supported
+//   symlinks: true,      // symbolic links supported
+//   caseSensitive: ...   // detected from the filesystem
+// }
+```
+
+## Adapter Capabilities
+
+Every adapter declares its capabilities through the `capabilities()` method. The layer uses these capabilities to determine which operations are supported:
+
+```ts
+interface AdapterCapabilities {
+  permissions: boolean;   // chmod/chown/lchown support
+  symlinks: boolean;      // symlink/readlink support
+  caseSensitive: boolean; // case-sensitive path matching
+}
+```
+
+| Capability | When `true` | When `false` |
+| --- | --- | --- |
+| `permissions` | `chmod`, `chown`, and `lchown` operations are supported | Permission operations throw an error |
+| `symlinks` | `symlink` and `readlink` operations are supported | Symlink operations throw an error |
+| `caseSensitive` | `/File.txt` and `/file.txt` are different files | `/File.txt` and `/file.txt` are the same file |
+
+## Available Adapters
+
+| Adapter | Package | Environment | Description |
+| --- | --- | --- | --- |
+| `LocalAdapter` | `@catmint-fs/core` | Node.js | Local filesystem via `fs` APIs |
+| `SqliteAdapter` | [`@catmint-fs/sqlite-adapter`](/fs/sqlite-adapter/overview) | Any (with SQLite) | SQLite-backed persistent filesystem |
+
+## Choosing an Adapter
+
+Use `LocalAdapter` when:
+- You are working with files on the local disk
+- You are running in a Node.js environment
+- You need full POSIX permission and symlink support
+
+Use `SqliteAdapter` when:
+- You need a portable, self-contained filesystem
+- You are building tools that need filesystem persistence without real files
+- You want to embed a virtual filesystem in a database
+
+Use a [custom adapter](/fs/core/guides/custom-adapters) when:
+- You need to back the layer with a remote API, object store, or in-memory structure
+- You are targeting a non-Node.js runtime and need a browser-compatible adapter
+
+## Adapter Initialization
+
+Adapters may implement an optional `initialize(root: string)` method. If present, the layer calls it during creation with the configured root path. This allows the adapter to set up any required resources:
+
+```ts
+class MyAdapter implements FsAdapter {
+  async initialize(root: string) {
+    // Set up database tables, open connections, etc.
+  }
+  // ...
+}
+```
+
+## See Also
+
+- [FsAdapter API](/fs/core/api/fs-adapter) — full interface reference
+- [LocalAdapter API](/fs/core/api/local-adapter) — built-in adapter reference
+- [Custom Adapters](/fs/core/guides/custom-adapters) — writing your own adapter
+- [SqliteAdapter](/fs/sqlite-adapter/overview) — SQLite-backed adapter

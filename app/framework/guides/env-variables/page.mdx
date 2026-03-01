@@ -1,0 +1,196 @@
+# Environment Variables
+
+Catmint provides a structured environment variable system with automatic `.env` file loading, server/client separation, typed proxy accessors, and build-time enforcement to prevent accidental secret leakage.
+
+## Loading .env Files
+
+Catmint loads environment files in a specific order, where later files override earlier ones. The files are resolved relative to your project root:
+
+1. `.env` -- loaded in all environments
+2. `.env.local` -- loaded in all environments, ignored by git
+3. `.env.development` -- loaded only when `NODE_ENV=development`
+4. `.env.production` -- loaded only when `NODE_ENV=production`
+5. `.env.test` -- loaded only when `NODE_ENV=test`
+
+Environment-specific files take precedence over the base `.env` file. The `.env.local` file is intended for secrets and local overrides -- add it to your `.gitignore`.
+
+```sh
+# .env
+DATABASE_URL=postgres://localhost:5432/myapp
+API_BASE_URL=https://api.example.com
+
+# .env.local (git-ignored)
+DATABASE_URL=postgres://user:secret@localhost:5432/myapp_dev
+STRIPE_SECRET_KEY=sk_test_abc123
+
+# .env.production
+API_BASE_URL=https://api.production.example.com
+```
+
+## Private vs. Public Variables
+
+Catmint separates environment variables into two namespaces accessed through typed proxy objects imported from `catmint/env`:
+
+### env.private -- Server-only variables
+
+Variables accessed via `env.private` are only available on the server. They are never sent to the client bundle. Use them for database credentials, API keys, and other secrets.
+
+```ts
+// app/lib/db.server.ts
+import { env } from 'catmint/env'
+
+const db = createClient({
+  connectionString: env.private.DATABASE_URL,
+  apiKey: env.private.STRIPE_SECRET_KEY,
+})
+```
+
+### env.public -- Client-safe variables
+
+Variables accessed via `env.public` are safe to expose to the browser. They are inlined into the client bundle at build time. Use them for public API endpoints, feature flags, and analytics IDs.
+
+```tsx
+// app/components/analytics.client.tsx
+import { env } from 'catmint/env'
+
+export function Analytics() {
+  return (
+    <script
+      src="https://analytics.example.com/script.js"
+      data-id={env.public.ANALYTICS_ID}
+    />
+  )
+}
+```
+
+To make a variable available on the client, prefix it with `PUBLIC_` in your `.env` file:
+
+```sh
+# .env
+PUBLIC_ANALYTICS_ID=UA-12345
+PUBLIC_API_BASE_URL=https://api.example.com
+DATABASE_URL=postgres://localhost:5432/myapp    # private by default
+```
+
+Variables without the `PUBLIC_` prefix are private by default. When accessing public variables through the proxy, the `PUBLIC_` prefix is stripped:
+
+```ts
+// PUBLIC_ANALYTICS_ID -> env.public.ANALYTICS_ID
+// PUBLIC_API_BASE_URL -> env.public.API_BASE_URL
+```
+
+## Build-Time Enforcement
+
+Catmint includes a Vite plugin that statically analyzes your code and blocks any import of `env.private` in client-side code. This prevents accidental secret leakage at build time rather than at runtime.
+
+```ts
+// app/components/header.client.tsx
+import { env } from 'catmint/env'
+
+// Build error: "env.private" cannot be accessed in client code.
+// Use "env.public" for client-safe variables.
+const secret = env.private.DATABASE_URL
+```
+
+> The enforcement applies to any file included in the client bundle, including shared utilities that are imported by client components. Files with the `.server.ts` suffix are excluded from the client bundle entirely and can safely use `env.private`.
+
+## Variable Expansion
+
+Catmint supports variable expansion within `.env` files using shell-like syntax. This lets you compose values from other variables.
+
+### Basic expansion
+
+Reference another variable with `${VAR}`:
+
+```sh
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=myapp
+DATABASE_URL=postgres://${DB_HOST}:${DB_PORT}/${DB_NAME}
+# Result: postgres://localhost:5432/myapp
+```
+
+### Default values
+
+Use `${VAR:-default}` to provide a fallback when a variable is unset or empty:
+
+```sh
+PORT=${PORT:-3000}
+LOG_LEVEL=${LOG_LEVEL:-info}
+API_URL=${API_URL:-http://localhost:8080}
+```
+
+### Required variables
+
+Use `${VAR:?error message}` to throw an error if a variable is not set. The build will fail with the provided message:
+
+```sh
+DATABASE_URL=${DATABASE_URL:?DATABASE_URL is required}
+STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:?Missing Stripe key - set in .env.local}
+```
+
+## Typed Proxy Accessors
+
+The `env.private` and `env.public` objects are JavaScript `Proxy` instances. Accessing any property reads the corresponding environment variable at runtime (on the server) or returns the inlined value (on the client).
+
+```ts
+import { env } from 'catmint/env'
+
+// Server-side: reads process.env.DATABASE_URL at runtime
+const dbUrl = env.private.DATABASE_URL
+
+// Client-side: replaced with the literal value at build time
+const apiUrl = env.public.API_BASE_URL
+```
+
+To get full type safety, declare your variables in a `env.d.ts` file at your project root:
+
+```ts
+// env.d.ts
+declare module 'catmint/env' {
+  interface PrivateEnv {
+    DATABASE_URL: string
+    STRIPE_SECRET_KEY: string
+    REDIS_URL: string
+  }
+
+  interface PublicEnv {
+    ANALYTICS_ID: string
+    API_BASE_URL: string
+  }
+}
+```
+
+With these declarations in place, TypeScript will autocomplete variable names and catch typos at compile time.
+
+## Usage in Server Functions
+
+Server functions run exclusively on the server, so they can safely access both `env.private` and `env.public`:
+
+```ts
+// app/lib/users.fn.ts
+import { createServerFn } from 'catmint/server'
+import { env } from 'catmint/env'
+
+export const getUser = createServerFn(async (id: string) => {
+  const res = await fetch(`${env.private.API_INTERNAL_URL}/users/${id}`, {
+    headers: {
+      Authorization: `Bearer ${env.private.API_SECRET}`,
+    },
+  })
+  return res.json()
+})
+```
+
+## Summary
+
+| Feature | Details |
+| --- | --- |
+| File loading | `.env`, `.env.local`, `.env.[mode]` |
+| Private access | `env.private.VAR` -- server only |
+| Public access | `env.public.VAR` -- safe for client |
+| Build enforcement | Vite plugin blocks `env.private` in client code |
+| Variable expansion | `${VAR}`, `${VAR:-default}`, `${VAR:?error}` |
+| Type safety | Declare `PrivateEnv` and `PublicEnv` in `env.d.ts` |
+
+[Next: Headers →](/framework/guides/headers)

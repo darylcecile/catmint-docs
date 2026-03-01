@@ -1,0 +1,142 @@
+# Diffing
+
+The `diff` method computes file-level and hunk-level differences, similar to `git diff`.
+
+## Working Tree vs Index
+
+By default, `diff` compares the working tree against the index (staged snapshot):
+
+```typescript
+// Modify a file
+await layer.writeFile("/README.md", "# Updated Project\n\nNew content.");
+
+// See what changed
+const diffs = await repo.diff();
+for (const entry of diffs) {
+  console.log(entry.path);   // "README.md"
+  console.log(entry.type);   // "modified"
+}
+```
+
+## Index vs HEAD (Staged Changes)
+
+Pass `{ staged: true }` to compare the index against the last commit:
+
+```typescript
+// Stage a change
+await repo.add("README.md");
+
+// Diff staged changes
+const stagedDiffs = await repo.diff({ staged: true });
+for (const entry of stagedDiffs) {
+  console.log(entry.path, entry.type);
+}
+```
+
+## Diff Entry Structure
+
+Each diff entry contains:
+
+```typescript
+interface DiffEntry {
+  path: string;
+  type: "added" | "modified" | "deleted";
+  hunks: DiffHunk[];
+}
+```
+
+## Hunks
+
+Each hunk represents a contiguous region of changes:
+
+```typescript
+interface DiffHunk {
+  oldStart: number;   // Line number in the old file
+  oldLines: number;   // Number of lines in the old file
+  newStart: number;   // Line number in the new file
+  newLines: number;   // Number of lines in the new file
+  lines: DiffLine[];
+}
+
+interface DiffLine {
+  type: "context" | "add" | "delete";
+  content: string;
+}
+```
+
+### Reading Hunks
+
+```typescript
+const diffs = await repo.diff();
+for (const entry of diffs) {
+  console.log(`--- ${entry.path} ---`);
+  for (const hunk of entry.hunks) {
+    console.log(`@@ -${hunk.oldStart},${hunk.oldLines} +${hunk.newStart},${hunk.newLines} @@`);
+    for (const line of hunk.lines) {
+      const prefix = line.type === "add" ? "+" : line.type === "delete" ? "-" : " ";
+      console.log(`${prefix} ${line.content}`);
+    }
+  }
+}
+```
+
+## Diff for Specific Files
+
+```typescript
+const diffs = await repo.diff();
+
+// Filter to a specific file
+const readmeDiff = diffs.find((d) => d.path === "README.md");
+if (readmeDiff) {
+  console.log(`${readmeDiff.hunks.length} hunks changed`);
+}
+```
+
+## Detecting New and Deleted Files
+
+```typescript
+const diffs = await repo.diff();
+
+const added = diffs.filter((d) => d.type === "added");
+const deleted = diffs.filter((d) => d.type === "deleted");
+const modified = diffs.filter((d) => d.type === "modified");
+
+console.log(`${added.length} added, ${deleted.length} deleted, ${modified.length} modified`);
+```
+
+## Full Example
+
+```typescript
+import { createMemoryLayer } from "@catmint-fs/core";
+import { initRepository } from "@catmint-fs/git";
+
+const layer = createMemoryLayer();
+const repo = await initRepository(layer);
+const author = { name: "Alice", email: "alice@example.com" };
+
+// Create initial content
+await layer.writeFile("/hello.txt", "Hello\nWorld\n");
+await repo.add("hello.txt");
+await repo.commit({ message: "Add hello.txt", author });
+
+// Modify the file
+await layer.writeFile("/hello.txt", "Hello\nTypeScript\nWorld\n");
+
+// Diff working tree
+const diffs = await repo.diff();
+const entry = diffs[0];
+console.log(entry.path); // "hello.txt"
+console.log(entry.hunks[0].lines);
+// [
+//   { type: "context", content: "Hello" },
+//   { type: "add",     content: "TypeScript" },
+//   { type: "context", content: "World" },
+// ]
+```
+
+## See Also
+
+- [Staging and Commits](/fs/git/guides/staging-commits)
+- [Merging](/fs/git/guides/merging)
+- [API: Repository](/fs/git/api/repository)
+- [API: Types](/fs/git/api/types)

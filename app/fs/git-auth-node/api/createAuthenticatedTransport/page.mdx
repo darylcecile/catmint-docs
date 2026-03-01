@@ -1,0 +1,104 @@
+# createAuthenticatedTransport
+
+Creates an HTTP transport with credentials pre-filled for a given URL. This is the simpler authentication pattern -- instead of providing separate `onAuth`/`onAuthFailure` callbacks, you get a transport object that handles authentication internally.
+
+## Import
+
+```typescript
+import { createAuthenticatedTransport } from "@catmint-fs/git-auth-node";
+```
+
+## Signature
+
+```typescript
+function createAuthenticatedTransport(
+  url: string,
+): Promise<HttpTransport>;
+```
+
+## Parameters
+
+| Parameter | Type     | Required | Description                                          |
+| --------- | -------- | -------- | ---------------------------------------------------- |
+| `url`     | `string` | Yes      | The remote repository URL to authenticate against.   |
+
+## Return Value
+
+Returns a `Promise<HttpTransport>` -- an HTTP transport object compatible with `@catmint-fs/git` operations. The transport includes the credentials retrieved from the system's `git credential` helper.
+
+If no credentials are available for the given URL, the returned transport will attempt unauthenticated requests.
+
+## Examples
+
+### Clone a Private Repository
+
+```typescript
+import { createAuthenticatedTransport } from "@catmint-fs/git-auth-node";
+import { clone } from "@catmint-fs/git";
+import { SqliteAdapter } from "@catmint-fs/sqlite-adapter";
+import { CatmintFs } from "@catmint-fs/core";
+
+const adapter = new SqliteAdapter({ database: ":memory:" });
+const fs = new CatmintFs(adapter);
+
+const url = "https://github.com/my-org/private-repo.git";
+const http = await createAuthenticatedTransport(url);
+
+await clone({
+  fs,
+  url,
+  dir: "/repo",
+  http,
+});
+```
+
+### Fetch with Pre-Authenticated Transport
+
+```typescript
+import { createAuthenticatedTransport } from "@catmint-fs/git-auth-node";
+import { fetch } from "@catmint-fs/git";
+
+const http = await createAuthenticatedTransport(
+  "https://github.com/my-org/private-repo.git"
+);
+
+await fetch({
+  fs,
+  dir: "/repo",
+  http,
+});
+```
+
+### Multiple Operations with the Same Transport
+
+The transport can be reused across multiple operations to the same host:
+
+```typescript
+import { createAuthenticatedTransport } from "@catmint-fs/git-auth-node";
+import { clone, fetch, push } from "@catmint-fs/git";
+
+const http = await createAuthenticatedTransport(
+  "https://github.com/my-org/private-repo.git"
+);
+
+await clone({ fs, url: "https://github.com/my-org/private-repo.git", dir: "/repo", http });
+
+// Later...
+await fetch({ fs, dir: "/repo", http });
+await push({ fs, dir: "/repo", remote: "origin", ref: "main", http });
+```
+
+## When to Use This vs. Callbacks
+
+| Pattern                       | Use When                                                        |
+| ----------------------------- | --------------------------------------------------------------- |
+| `createAuthenticatedTransport` | You want simple, fire-and-forget authentication                |
+| `createNodeAuthCallbacks`      | You need control over auth failure handling or retry logic       |
+
+The transport pattern looks up credentials once at creation time. If credentials expire or are rejected during an operation, the transport does not automatically retry with new credentials. For long-running processes where credentials might change, prefer the callback-based approach.
+
+## See Also
+
+- [createNodeAuthCallbacks](/fs/git-auth-node/api/createNodeAuthCallbacks)
+- [Credential Helpers](/fs/git-auth-node/api/credentials)
+- [@catmint-fs/git Overview](/fs/git/overview)

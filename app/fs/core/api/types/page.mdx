@@ -1,0 +1,261 @@
+# Types
+
+Type definitions exported by `@catmint-fs/core`.
+
+## Import
+
+```ts
+import type {
+  ChangeEntry,
+  ChangeDetail,
+  ApplyResult,
+  ApplyError,
+  TransactionError,
+  StatResult,
+  DirentEntry,
+  WriteOptions,
+  MkdirOptions,
+  RmOptions,
+  PermissionOp,
+  EntryType,
+  AdapterCapabilities,
+  CreateLayerOptions,
+  FsAdapter,
+} from "@catmint-fs/core";
+```
+
+## Change Types
+
+### ChangeEntry
+
+Represents a single pending change in the layer.
+
+```ts
+interface ChangeEntry {
+  type: "create" | "update" | "delete" | "rename" | "chmod" | "chown";
+  path: string;
+  entryType: EntryType;
+}
+```
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `type` | `"create" \| "update" \| "delete" \| "rename" \| "chmod" \| "chown"` | The kind of change |
+| `path` | `string` | Absolute path (relative to layer root) of the affected entry |
+| `entryType` | `EntryType` | Whether the entry is a file, directory, or symlink |
+
+### ChangeDetail
+
+Extended change information returned by `getChangeDetail()`.
+
+```ts
+interface ChangeDetail extends ChangeEntry {
+  renameTo?: string;
+  mode?: number;
+  uid?: number;
+  gid?: number;
+}
+```
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `renameTo` | `string` | For `rename` changes, the destination path |
+| `mode` | `number` | For `chmod` changes, the new permission mode |
+| `uid` | `number` | For `chown` changes, the new user ID |
+| `gid` | `number` | For `chown` changes, the new group ID |
+
+### EntryType
+
+```ts
+type EntryType = "file" | "directory" | "symlink";
+```
+
+## Apply Types
+
+### ApplyResult
+
+Returned by `layer.apply()` in best-effort mode.
+
+```ts
+interface ApplyResult {
+  applied: number;
+  errors: ApplyError[];
+}
+```
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `applied` | `number` | Number of changes successfully applied |
+| `errors` | `ApplyError[]` | Array of errors for changes that failed |
+
+### ApplyError
+
+Describes a single failure during `apply()`.
+
+```ts
+interface ApplyError {
+  path: string;
+  error: Error;
+}
+```
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `path` | `string` | The path that failed to apply |
+| `error` | `Error` | The underlying error |
+
+### TransactionError
+
+Thrown by `layer.apply({ transaction: true })` when a change fails. Extends `Error`.
+
+```ts
+class TransactionError extends Error {
+  failedPath: string;
+  revertedCount: number;
+}
+```
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `failedPath` | `string` | The path where the transaction failed |
+| `revertedCount` | `number` | Number of changes that were reverted |
+
+## Filesystem Types
+
+### StatResult
+
+File or directory metadata returned by `stat()` and `lstat()`.
+
+```ts
+interface StatResult {
+  type: EntryType;
+  size: number;
+  mode: number;
+  mtime: Date;
+  uid?: number;
+  gid?: number;
+}
+```
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `type` | `EntryType` | `"file"`, `"directory"`, or `"symlink"` |
+| `size` | `number` | Size in bytes (0 for directories) |
+| `mode` | `number` | Permission mode (e.g., `0o644`) |
+| `mtime` | `Date` | Last modification time |
+| `uid` | `number` | Owner user ID (if available) |
+| `gid` | `number` | Owner group ID (if available) |
+
+### DirentEntry
+
+A directory entry returned by `readdir()`.
+
+```ts
+interface DirentEntry {
+  name: string;
+  type: EntryType;
+}
+```
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `name` | `string` | Entry name (not the full path) |
+| `type` | `EntryType` | `"file"`, `"directory"`, or `"symlink"` |
+
+## Option Types
+
+### WriteOptions
+
+Options for `writeFile()`.
+
+```ts
+interface WriteOptions {
+  mode?: number;
+}
+```
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `mode` | `number` | `0o644` | File permission mode |
+
+### MkdirOptions
+
+Options for `mkdir()`.
+
+```ts
+interface MkdirOptions {
+  recursive?: boolean;
+}
+```
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `recursive` | `boolean` | `false` | Create parent directories if they do not exist |
+
+### RmOptions
+
+Options for `rm()`.
+
+```ts
+interface RmOptions {
+  recursive?: boolean;
+}
+```
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `recursive` | `boolean` | `false` | Remove directory contents recursively |
+
+## Permission Types
+
+### PermissionOp
+
+The type of permission check performed by `checkPermission()`.
+
+```ts
+type PermissionOp = "read" | "write" | "execute";
+```
+
+## Adapter Types
+
+### AdapterCapabilities
+
+Declares what features an adapter supports.
+
+```ts
+interface AdapterCapabilities {
+  permissions: boolean;
+  symlinks: boolean;
+  caseSensitive: boolean;
+}
+```
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `permissions` | `boolean` | Whether `chmod`/`chown`/`lchown` are supported |
+| `symlinks` | `boolean` | Whether `symlink`/`readlink` are supported |
+| `caseSensitive` | `boolean` | Whether path matching is case-sensitive |
+
+### CreateLayerOptions
+
+Options passed to `createLayer()`.
+
+```ts
+interface CreateLayerOptions {
+  root: string;
+  adapter?: FsAdapter;
+}
+```
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `root` | `string` | Yes | Absolute path for the layer root |
+| `adapter` | `FsAdapter` | No | Backing filesystem adapter (defaults to `LocalAdapter`) |
+
+## See Also
+
+- [createLayer](/fs/core/api/createLayer) — uses `CreateLayerOptions`
+- [Layer](/fs/core/api/layer) — uses `ChangeEntry`, `ChangeDetail`, `ApplyResult`
+- [FsAdapter](/fs/core/api/fs-adapter) — uses `AdapterCapabilities`, `StatResult`, `DirentEntry`
+- [Change Tracking guide](/fs/core/guides/change-tracking) — `ChangeEntry` and `ChangeDetail` semantics
+- [Applying Changes guide](/fs/core/guides/applying-changes) — `ApplyResult` and `TransactionError` behavior

@@ -1,0 +1,141 @@
+# Repositories
+
+This guide covers creating, opening, and cloning git repositories with `@catmint-fs/git`.
+
+## Creating a New Repository
+
+Use `initRepository` to create a fresh git repository backed by any [@catmint-fs/core](/fs/core/overview) layer:
+
+```typescript
+import { createMemoryLayer } from "@catmint-fs/core";
+import { initRepository } from "@catmint-fs/git";
+
+const layer = createMemoryLayer();
+const repo = await initRepository(layer);
+```
+
+This creates the `.git` directory structure including `HEAD`, `refs/`, `objects/`, and `config`. It is equivalent to running `git init`.
+
+### Custom Default Branch
+
+By default the initial branch is `main`. You can change this:
+
+```typescript
+const repo = await initRepository(layer, { defaultBranch: "trunk" });
+console.log(await repo.currentBranch()); // "trunk"
+```
+
+### Bare Repositories
+
+A bare repository has no working tree — it only contains the `.git` internals at the root of the layer. This is the standard format for remote repositories:
+
+```typescript
+const repo = await initRepository(layer, { bare: true });
+```
+
+## Opening an Existing Repository
+
+If a layer already contains a valid git repository, use `openRepository`:
+
+```typescript
+import { openRepository } from "@catmint-fs/git";
+
+const repo = await openRepository(layer);
+```
+
+This reads the existing `.git` directory and returns a `Repository` instance. It throws if the layer does not contain a valid repository.
+
+### Opening With Different Adapters
+
+Since `@catmint-fs/git` works with any core adapter, you can open repositories backed by different storage:
+
+```typescript
+import { createNodeLayer } from "@catmint-fs/core";
+import { openRepository } from "@catmint-fs/git";
+
+// Open a repository on the local filesystem
+const layer = createNodeLayer("/path/to/project");
+const repo = await openRepository(layer);
+```
+
+```typescript
+import { createSqliteLayer } from "@catmint-fs/sqlite-adapter";
+import { openRepository } from "@catmint-fs/git";
+
+// Open a repository stored in SQLite
+const layer = createSqliteLayer("repo.db");
+const repo = await openRepository(layer);
+```
+
+## Cloning a Remote Repository
+
+Use `cloneRepository` to clone from a remote URL:
+
+```typescript
+import { createMemoryLayer } from "@catmint-fs/core";
+import { cloneRepository, httpTransport } from "@catmint-fs/git";
+
+const layer = createMemoryLayer();
+const repo = await cloneRepository(layer, {
+  url: "https://github.com/user/repo.git",
+  transport: httpTransport(),
+});
+```
+
+### Clone Options
+
+```typescript
+const repo = await cloneRepository(layer, {
+  url: "https://github.com/user/repo.git",
+  branch: "develop",       // Check out a specific branch (default: remote HEAD)
+  depth: 1,                // Shallow clone with limited history
+  bare: true,              // Clone as a bare repository
+  transport: httpTransport(),
+});
+```
+
+### Authenticated Cloning
+
+For private repositories, pass credentials through the transport:
+
+```typescript
+import { httpTransport } from "@catmint-fs/git";
+
+const transport = httpTransport({
+  headers: {
+    Authorization: "Bearer ghp_xxxxxxxxxxxx",
+  },
+});
+
+const repo = await cloneRepository(layer, {
+  url: "https://github.com/user/private-repo.git",
+  transport,
+});
+```
+
+For Node.js credential helpers, see [@catmint-fs/git-auth-node](/fs/git-auth-node/overview).
+
+## Repository Configuration
+
+Every repository has a `.git/config` file. You can read and write configuration values:
+
+```typescript
+// Set config values
+await repo.setConfig("user.name", "Alice");
+await repo.setConfig("user.email", "alice@example.com");
+
+// Read config values
+const name = await repo.getConfig("user.name");
+console.log(name); // "Alice"
+
+// Delete config values
+await repo.deleteConfig("user.email");
+```
+
+## See Also
+
+- [API: initRepository](/fs/git/api/initRepository)
+- [API: openRepository](/fs/git/api/openRepository)
+- [API: cloneRepository](/fs/git/api/cloneRepository)
+- [Branching](/fs/git/guides/branches)
+- [Remote Operations](/fs/git/guides/remotes)

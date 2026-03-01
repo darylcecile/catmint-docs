@@ -1,0 +1,254 @@
+# Middleware
+
+Middleware in Catmint intercepts requests before they reach your pages or API endpoints. It follows an onion execution model where middleware files are resolved from the tip of the directory tree to the root, but executed from root to tip. This guide covers the middleware convention, composition, short-circuiting, inheritance boundaries, and common patterns.
+
+## The middleware.ts Convention
+
+Place a `middleware.ts` file in any directory inside `app/`. Export a default function wrapped with the `middleware()` helper from `catmint/middleware`:
+
+```ts
+// app/middleware.ts
+import { middleware } from 'catmint/middleware'
+
+export default middleware(async (request, next) => {
+  console.log('Request:', request.method, request.url)
+
+  const response = await next()
+
+  console.log('Response:', response.status)
+  return response
+})
+```
+
+The `middleware()` wrapper provides type safety and ensures proper integration with the Catmint runtime. Every middleware function receives two arguments: the incoming `request` (a standard Web `Request` object) and a `next` function.
+
+## The Onion Execution Model
+
+Middleware files are **resolved** from the tip of the route tree to the root (collecting all applicable middleware), but **executed** from root to tip. Each middleware wraps the next, forming an onion:
+
+```text
+app/
+  middleware.ts              # Root middleware (executes 1st)
+  dashboard/
+    middleware.ts            # Dashboard middleware (executes 2nd)
+    analytics/
+      middleware.ts          # Analytics middleware (executes 3rd)
+      page.tsx               # Page handler (innermost)
+```
+
+```text
+Request: /dashboard/analytics
+
+  Root middleware (before next)
+    -> Dashboard middleware (before next)
+      -> Analytics middleware (before next)
+        -> Page renders
+      <- Analytics middleware (after next)
+    <- Dashboard middleware (after next)
+  <- Root middleware (after next)
+
+Response sent
+```
+
+Code before `await next()` runs on the way in (request phase). Code after runs on the way out (response phase). This allows each layer to inspect or modify both the request and the response.
+
+## The next() Function
+
+Calling `next()` passes control to the next middleware in the chain (or the page handler if there is no more middleware). It returns a `Promise<Response>` that you can inspect or modify:
+
+```ts
+// app/middleware.ts
+import { middleware } from 'catmint/middleware'
+
+export default middleware(async (request, next) => {
+  const start = Date.now()
+
+  // Pass control downstream
+  const response = await next()
+
+  // Modify the response on the way out
+  const elapsed = Date.now() - start
+  response.headers.set('X-Response-Time', `${elapsed}ms`)
+
+  return response
+})
+```
+
+You **must** return a `Response` from your middleware. Either return the response from `next()` (optionally modified) or return your own `Response` to short-circuit.
+
+## Short-Circuiting
+
+To stop the request from reaching downstream middleware and the page, return a `Response` without calling `next()`. This is useful for authentication guards, rate limiting, or returning cached responses:
+
+```ts
+// app/dashboard/middleware.ts
+import { middleware } from 'catmint/middleware'
+import { redirect } from 'catmint/routing'
+import { getSession } from '../lib/auth.server'
+
+export default middleware(async (request, next) => {
+  const session = await getSession(request)
+
+  if (!session) {
+    // Short-circuit: redirect to login without calling next()
+    return redirect('/login')
+  }
+
+  // User is authenticated, continue to the page
+  return next()
+})
+```
+
+When a middleware short-circuits, none of the downstream middleware or the page handler runs. The response is sent directly back through any upstream middleware that already called `next()`.
+
+## Composing Middleware
+
+Use `composeMiddleware()` to combine multiple middleware functions into a single unit. This is useful when you want to apply several concerns in one `middleware.ts` file:
+
+```ts
+// app/api/middleware.ts
+import { middleware, composeMiddleware } from 'catmint/middleware'
+
+const logging = middleware(async (request, next) => {
+  console.log(`[${request.method}] ${request.url}`)
+  return next()
+})
+
+const cors = middleware(async (request, next) => {
+  const response = await next()
+  response.headers.set('Access-Control-Allow-Origin', '*')
+  response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE')
+  return response
+})
+
+const rateLimit = middleware(async (request, next) => {
+  // Rate limiting logic here
+  return next()
+})
+
+export default composeMiddleware(logging, cors, rateLimit)
+```
+
+Composed middleware functions execute in the order they are passed to `composeMiddleware()`. In the example above, `logging` runs first, then `cors`, then `rateLimit`.
+
+## Stopping Inheritance with inherit: false
+
+By default, middleware is inherited by all child routes. A middleware at `app/middleware.ts` runs for every route in the application. To stop ancestor middleware from applying, export `inherit` as `false`:
+
+```ts
+// app/webhooks/middleware.ts
+import { middleware } from 'catmint/middleware'
+
+export const inherit = false
+
+export default middleware(async (request, next) => {
+  // This is the only middleware that runs for /webhooks/* routes.
+  // The root middleware and any other ancestor middleware are skipped.
+  const signature = request.headers.get('X-Webhook-Signature')
+  if (!signature) {
+    return new Response('Unauthorized', { status: 401 })
+  }
+
+  return next()
+})
+```
+
+> The `inherit: false` boundary affects both middleware and layout inheritance. If you need to break only one, consider restructuring with route groups instead.
+
+## Accessing Request and Response
+
+Middleware receives a standard Web `Request` object. You can read headers, cookies, the URL, method, and body:
+
+```ts
+// app/middleware.ts
+import { middleware } from 'catmint/middleware'
+
+export default middleware(async (request, next) => {
+  // Read request data
+  const url = new URL(request.url)
+  const method = request.method
+  const authHeader = request.headers.get('Authorization')
+  const userAgent = request.headers.get('User-Agent')
+
+  // Continue to the handler
+  const response = await next()
+
+  // Modify response headers
+  response.headers.set('X-Request-Id', crypto.randomUUID())
+  response.headers.set('X-Powered-By', 'Catmint')
+
+  return response
+})
+```
+
+## Redirecting in Middleware
+
+Use the `redirect()` function from `catmint/routing` to redirect requests. Since `redirect()` returns a `Response`, you can return it directly to short-circuit:
+
+```ts
+// app/middleware.ts
+import { middleware } from 'catmint/middleware'
+import { redirect } from 'catmint/routing'
+
+export default middleware(async (request, next) => {
+  const url = new URL(request.url)
+
+  // Redirect www to non-www
+  if (url.hostname.startsWith('www.')) {
+    url.hostname = url.hostname.slice(4)
+    return redirect(url.toString(), 301)
+  }
+
+  // Redirect old paths
+  if (url.pathname === '/blog') {
+    return redirect('/articles', 301)
+  }
+
+  return next()
+})
+```
+
+## Common Patterns
+
+### Authentication Guard
+
+```ts
+// app/(protected)/middleware.ts
+import { middleware } from 'catmint/middleware'
+import { redirect } from 'catmint/routing'
+import { verifyToken } from '../lib/auth.server'
+
+export default middleware(async (request, next) => {
+  const token = request.headers.get('Authorization')?.replace('Bearer ', '')
+
+  if (!token || !await verifyToken(token)) {
+    return redirect('/login')
+  }
+
+  return next()
+})
+```
+
+### Response Caching
+
+```ts
+// app/api/middleware.ts
+import { middleware } from 'catmint/middleware'
+
+export default middleware(async (request, next) => {
+  const response = await next()
+
+  // Add cache headers for GET requests
+  if (request.method === 'GET') {
+    response.headers.set('Cache-Control', 'public, max-age=60, s-maxage=300')
+  }
+
+  return response
+})
+```
+
+## Next Steps
+
+- [Layouts](/framework/guides/layouts) -- layout chains and persistence across navigation
+- [Server Functions](/framework/guides/server-functions) -- call server-side code directly from components
+- [API Endpoints](/framework/guides/api-endpoints) -- define HTTP handlers with endpoint files

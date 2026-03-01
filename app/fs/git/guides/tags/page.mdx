@@ -1,0 +1,98 @@
+# Tags
+
+Tags mark specific points in history. `@catmint-fs/git` supports both lightweight and annotated tags.
+
+## Lightweight Tags
+
+A lightweight tag is a simple pointer to a commit — no extra metadata:
+
+```typescript
+await repo.createTag("v1.0.0");
+```
+
+This creates a tag pointing at the current HEAD commit.
+
+### Tag a Specific Commit
+
+```typescript
+await repo.createTag("v0.9.0", { target: "abc1234" });
+```
+
+## Annotated Tags
+
+An annotated tag is a full git object that includes a tagger, timestamp, and message:
+
+```typescript
+await repo.createTag("v1.0.0", {
+  message: "Release version 1.0.0",
+  tagger: { name: "Alice", email: "alice@example.com" },
+});
+```
+
+Annotated tags are recommended for releases because they store who created the tag and when.
+
+## Listing Tags
+
+```typescript
+const tags = await repo.listTags();
+// ["v0.9.0", "v1.0.0"]
+```
+
+## Deleting Tags
+
+```typescript
+await repo.deleteTag("v0.9.0");
+```
+
+## Checking Out a Tag
+
+Tags can be checked out just like branches, but this puts you in detached HEAD state:
+
+```typescript
+await repo.checkout("v1.0.0");
+console.log(await repo.currentBranch()); // null (detached HEAD)
+```
+
+## Resolving a Tag Ref
+
+```typescript
+const oid = await repo.resolveRef("refs/tags/v1.0.0");
+console.log(oid); // The commit SHA this tag points to
+```
+
+## Release Tagging Workflow
+
+```typescript
+import { createMemoryLayer } from "@catmint-fs/core";
+import { initRepository } from "@catmint-fs/git";
+
+const layer = createMemoryLayer();
+const repo = await initRepository(layer);
+const author = { name: "Alice", email: "alice@example.com" };
+
+// Initial development
+await layer.writeFile("/app.ts", "export const version = '1.0.0';");
+await repo.add("app.ts");
+await repo.commit({ message: "Prepare v1.0.0 release", author });
+
+// Create an annotated release tag
+await repo.createTag("v1.0.0", {
+  message: "Release 1.0.0\n\n- Initial stable release\n- Full API coverage",
+  tagger: author,
+});
+
+// Continue development
+await layer.writeFile("/app.ts", "export const version = '1.1.0-dev';");
+await repo.add("app.ts");
+await repo.commit({ message: "Start v1.1.0 development", author });
+
+// List all tags
+const tags = await repo.listTags();
+console.log(tags); // ["v1.0.0"]
+```
+
+## See Also
+
+- [Branching](/fs/git/guides/branches)
+- [Staging and Commits](/fs/git/guides/staging-commits)
+- [API: Repository](/fs/git/api/repository)

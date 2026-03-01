@@ -1,0 +1,78 @@
+# catmint-fs
+
+A TypeScript monorepo providing a copy-on-write virtual filesystem with pluggable adapters and a pure-TypeScript git implementation built on top of it.
+
+## Architecture
+
+```txt
+@catmint-fs/core              Virtual filesystem layer (adapters + copy-on-write)
+    |
+    +-- LocalAdapter           Node.js fs-backed adapter (built in)
+    |
+    +-- @catmint-fs/sqlite-adapter   SQLite-backed adapter
+    |
+    +-- @catmint-fs/git        Git operations over any Layer
+         |
+         +-- @catmint-fs/git-auth-node   Node.js credential helpers
+```
+
+## Packages
+
+| Package | Description | Platform |
+| --- | --- | --- |
+| [`@catmint-fs/core`](/fs/core/overview) | Virtual filesystem layer with copy-on-write semantics over a pluggable backing store | Node.js + Browser |
+| [`@catmint-fs/git`](/fs/git/overview) | Programmatic git operations (init, commit, branch, merge, diff, stash, fetch, push, clone) | Node.js + Browser |
+| [`@catmint-fs/sqlite-adapter`](/fs/sqlite-adapter/overview) | SQLite-backed `FsAdapter` for `@catmint-fs/core` | Node.js only |
+| [`@catmint-fs/git-auth-node`](/fs/git-auth-node/overview) | Credential helper integration for `@catmint-fs/git` | Node.js only |
+
+## Browser Compatibility
+
+`@catmint-fs/core` and `@catmint-fs/git` are browser-safe. They use `Uint8Array` instead of `Buffer`, `ReadableStream` instead of Node streams, Web Crypto for SHA-1, and `fetch()` for HTTP. `LocalAdapter` and `@catmint-fs/sqlite-adapter` are Node.js only.
+
+| Component | Node.js | Browser |
+| --- | --- | --- |
+| `@catmint-fs/core` (Layer API + FsAdapter interface) | Yes | Yes |
+| `@catmint-fs/core` (LocalAdapter) | Yes | No |
+| `@catmint-fs/sqlite-adapter` | Yes | No |
+| `@catmint-fs/git` | Yes | Yes |
+| `@catmint-fs/git` (HTTP transport) | Yes | Yes |
+| `@catmint-fs/git-auth-node` | Yes | No |
+
+## Quick Start
+
+### In-memory git repo
+
+```ts
+import { createLayer } from "@catmint-fs/core";
+import { SqliteAdapter } from "@catmint-fs/sqlite-adapter";
+import { initRepository } from "@catmint-fs/git";
+
+const adapter = new SqliteAdapter({ database: ":memory:" });
+const layer = await createLayer({ root: "/", adapter });
+
+const repo = await initRepository(layer);
+await layer.writeFile("/readme.txt", "Hello\n");
+await repo.add("/readme.txt");
+await repo.commit({ message: "first commit" });
+
+const log = await repo.log();
+console.log(log[0].message); // "first commit"
+```
+
+### Local disk git repo
+
+```ts
+import { createLayer } from "@catmint-fs/core";
+import { initRepository } from "@catmint-fs/git";
+
+const layer = await createLayer({ root: "/tmp/my-repo" });
+const repo = await initRepository(layer);
+// Works with the standard git CLI
+```
+
+## Getting Started
+
+- [Core: Overview](/fs/core/overview) -- Start here to understand the virtual filesystem layer
+- [Git: Overview](/fs/git/overview) -- Start here for programmatic git operations
+- [SQLite Adapter: Overview](/fs/sqlite-adapter/overview) -- Portable filesystem storage
+- [Git Auth: Overview](/fs/git-auth-node/overview) -- System credential helpers for git

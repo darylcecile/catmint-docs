@@ -1,0 +1,208 @@
+# Staging and Commits
+
+This guide covers staging files, checking status, creating commits, and viewing history.
+
+## Staging Files
+
+Staging adds file changes to the index, preparing them for the next commit.
+
+### Add Files
+
+```typescript
+// Stage a single file
+await repo.add("src/index.ts");
+
+// Stage multiple files
+await repo.add("src/index.ts");
+await repo.add("src/utils.ts");
+await repo.add("README.md");
+```
+
+The `add` method reads the current content of the file from the working tree and writes a blob object to the object database, then updates the index entry.
+
+### Unstage Files
+
+Remove a file from the index without deleting it from the working tree:
+
+```typescript
+await repo.unstage("src/utils.ts");
+```
+
+### Remove Files
+
+Stage a file deletion — the file is removed from both the index and the working tree:
+
+```typescript
+await repo.remove("old-file.ts");
+```
+
+## Checking Status
+
+The `status` method returns the state of every tracked and untracked file:
+
+```typescript
+const entries = await repo.status();
+for (const entry of entries) {
+  console.log(entry.path, entry.indexStatus, entry.workingStatus);
+}
+```
+
+Each entry has two status fields:
+
+| Field | Compares | Values |
+| --- | --- | --- |
+| `indexStatus` | Index vs HEAD | `"added"`, `"modified"`, `"deleted"`, `"unchanged"` |
+| `workingStatus` | Working tree vs Index | `"modified"`, `"deleted"`, `"unchanged"`, `"untracked"` |
+
+### Filtering by Status
+
+```typescript
+const entries = await repo.status();
+
+// Find untracked files
+const untracked = entries.filter((e) => e.workingStatus === "untracked");
+
+// Find staged changes
+const staged = entries.filter((e) => e.indexStatus !== "unchanged");
+
+// Find modified but unstaged files
+const modified = entries.filter((e) => e.workingStatus === "modified");
+```
+
+## Listing Tracked Files
+
+```typescript
+const files = await repo.listFiles();
+// ["README.md", "src/index.ts", "src/utils.ts"]
+```
+
+## Checking .gitignore
+
+```typescript
+const ignored = await repo.isIgnored("node_modules/package/index.js");
+console.log(ignored); // true
+```
+
+## Creating Commits
+
+```typescript
+await repo.commit({
+  message: "Add user authentication",
+  author: {
+    name: "Alice",
+    email: "alice@example.com",
+  },
+});
+```
+
+The `commit` method:
+
+1. Builds a tree object from the current index
+2. Creates a commit object pointing to that tree and the current HEAD as parent
+3. Updates the current branch ref to point to the new commit
+
+### Separate Author and Committer
+
+```typescript
+await repo.commit({
+  message: "Fix typo in readme",
+  author: {
+    name: "Bob",
+    email: "bob@example.com",
+  },
+  committer: {
+    name: "Alice",
+    email: "alice@example.com",
+  },
+});
+```
+
+If `committer` is omitted, it defaults to the `author`.
+
+### Custom Timestamps
+
+```typescript
+await repo.commit({
+  message: "Backdated commit",
+  author: {
+    name: "Alice",
+    email: "alice@example.com",
+    timestamp: new Date("2024-01-15T10:00:00Z"),
+  },
+});
+```
+
+## Viewing History
+
+### Log
+
+```typescript
+// Get the full commit log
+const commits = await repo.log();
+
+for (const commit of commits) {
+  console.log(commit.oid);       // SHA-1 hash
+  console.log(commit.message);   // Commit message
+  console.log(commit.author);    // { name, email, timestamp }
+  console.log(commit.parents);   // Array of parent OIDs
+}
+```
+
+### Limiting Log Results
+
+```typescript
+// Last 10 commits
+const recent = await repo.log({ maxCount: 10 });
+
+// Commits affecting a specific path
+const fileHistory = await repo.log({ path: "src/index.ts" });
+```
+
+### Reading a Specific Commit
+
+```typescript
+const commit = await repo.readCommit("abc1234def5678");
+console.log(commit.message);
+console.log(commit.tree);    // Tree OID
+console.log(commit.parents); // Parent OIDs
+```
+
+## Full Workflow Example
+
+```typescript
+import { createMemoryLayer } from "@catmint-fs/core";
+import { initRepository } from "@catmint-fs/git";
+
+const layer = createMemoryLayer();
+const repo = await initRepository(layer);
+
+// First commit
+await layer.writeFile("/README.md", "# Project");
+await repo.add("README.md");
+await repo.commit({
+  message: "Initial commit",
+  author: { name: "Alice", email: "alice@example.com" },
+});
+
+// Second commit
+await layer.writeFile("/src/app.ts", "export const app = {}");
+await layer.writeFile("/README.md", "# Project\n\nWith app module.");
+await repo.add("src/app.ts");
+await repo.add("README.md");
+await repo.commit({
+  message: "Add app module and update readme",
+  author: { name: "Alice", email: "alice@example.com" },
+});
+
+// View history
+const log = await repo.log();
+console.log(log.length); // 2
+console.log(log[0].message); // "Add app module and update readme"
+console.log(log[1].message); // "Initial commit"
+```
+
+## See Also
+
+- [Diffing](/fs/git/guides/diffing)
+- [Branching](/fs/git/guides/branches)
+- [API: Repository](/fs/git/api/repository)

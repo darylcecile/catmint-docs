@@ -1,0 +1,87 @@
+# createTestContext
+
+Create a test context for testing middleware and server functions. Builds a complete context object with a `Request`, cookies, headers, and route parameters.
+
+## Import
+
+```ts
+import { createTestContext } from 'catmint/testing'
+```
+
+## Signature
+
+```ts
+function createTestContext(options?: TestContextOptions): TestContext
+```
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `options` | `TestContextOptions` | No | Configuration for the test context. |
+
+### `TestContextOptions`
+
+| Property | Type | Required | Description |
+|----------|------|----------|-------------|
+| `cookies` | `Record<string, string>` | No | Cookie key-value pairs. Serialized into the `Cookie` header automatically. |
+| `headers` | `Record<string, string>` | No | Request headers to include. |
+| `params` | `Record<string, string>` | No | Route parameters (e.g. `{ id: '42' }`). |
+
+## Return Value
+
+Returns a `TestContext` object:
+
+```ts
+interface TestContext {
+  /** The underlying Request object */
+  request: Request
+  /** Cookie key-value pairs */
+  cookies: Record<string, string>
+  /** Request headers */
+  headers: Headers
+  /** Route parameters */
+  params: Record<string, string>
+}
+```
+
+The `request` is a standard `Request` object pointing at `http://localhost/` with the configured headers and cookies applied.
+
+## Examples
+
+```ts
+import { createTestContext } from 'catmint/testing'
+
+// Basic context with no options
+const ctx = createTestContext()
+console.log(ctx.request.url) // "http://localhost/"
+```
+
+```ts
+// Context with cookies and route params
+const ctx = createTestContext({
+  cookies: { session: 'abc123' },
+  params: { id: '42' },
+  headers: { 'X-Custom': 'value' },
+})
+
+const result = await myMiddleware(ctx.request, async () => {
+  return new Response('OK')
+})
+```
+
+```ts
+// Testing a server function
+const ctx = createTestContext({
+  cookies: { auth: 'token-xyz' },
+})
+
+const data = await myServerFunction(ctx.request)
+expect(data.authenticated).toBe(true)
+```
+
+## See Also
+
+- [createTestRequest](/framework/api/createTestRequest)
+- [renderPage](/framework/api/renderPage)
+- [mockServerFn](/framework/api/mockServerFn)

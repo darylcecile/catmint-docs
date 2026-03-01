@@ -1,0 +1,136 @@
+# createServerFn
+
+Create a server function that can be called from both server and client code. On the server, the handler is called directly. On the client, the Vite plugin transforms the call into an RPC request to an auto-generated API endpoint.
+
+## Import
+
+```ts
+import { createServerFn } from "catmint/server";
+```
+
+## Signature
+
+```ts
+function createServerFn<TInput, TOutput>(
+  handler: (input: TInput) => Promise<TOutput> | TOutput,
+  options?: ServerFnOptions<TInput>,
+): ServerFunction<TInput, TOutput>;
+```
+
+## Parameters
+
+| Parameter | Type                                             | Required | Description                                      |
+| --------- | ------------------------------------------------ | -------- | ------------------------------------------------ |
+| `handler` | `(input: TInput) => Promise<TOutput> \| TOutput` | Yes      | The server-side handler function.                |
+| `options` | `ServerFnOptions<TInput>`                        | No       | Configuration options for method and validation. |
+
+### `ServerFnOptions<T>`
+
+```ts
+interface ServerFnOptions<T = unknown> {
+  method?: "GET" | "POST" | "PUT" | "DELETE";
+  validate?: StandardSchemaV1 | ((input: unknown) => T);
+}
+```
+
+| Field      | Type                                          | Default  | Description                                                                                                                                                                                           |
+| ---------- | --------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `method`   | `'GET' \| 'POST' \| 'PUT' \| 'DELETE'`        | `'POST'` | HTTP method for the auto-generated RPC endpoint.                                                                                                                                                      |
+| `validate` | `StandardSchemaV1 \| ((input: unknown) => T)` | —        | Input validation. Accepts any [Standard Schema](https://github.com/standard-schema/standard-schema) object (Zod, Valibot, ArkType, etc.) or a plain validation function that throws on invalid input. |
+
+## Return Value
+
+Returns a `ServerFunction<TInput, TOutput>` — an async callable function with attached metadata used by the Vite plugin for build-time transformation.
+
+```ts
+type ServerFunction<TInput, TOutput> = ((input: TInput) => Promise<TOutput>) &
+  ServerFnMetadata;
+
+interface ServerFnMetadata {
+  __serverFn: true;
+  __method: "GET" | "POST" | "PUT" | "DELETE";
+  __hasValidation: boolean;
+}
+```
+
+## Runtime Behavior
+
+| Call site                           | Behavior                                                      |
+| ----------------------------------- | ------------------------------------------------------------- |
+| Server code (SSR, other server fns) | Direct function invocation. No HTTP overhead.                 |
+| Client code (browser)               | Compiled into a `fetch()` call to an auto-generated endpoint. |
+
+The function name is hashed at compile time to produce a stable, opaque identifier for the RPC endpoint (e.g., `/__catmint/fn/data/a1b2c3d4`).
+
+## Examples
+
+```ts
+import { createServerFn } from "catmint/server";
+
+// Basic server function
+export const getUser = createServerFn(async (id: string) => {
+  return db.users.findById(id);
+});
+```
+
+```ts
+import { createServerFn } from "catmint/server";
+import { z } from "zod";
+
+// With Standard Schema validation (Zod)
+const userSchema = z.object({
+  name: z.string(),
+  email: z.string().email(),
+});
+
+export const createUser = createServerFn(
+  async (data: z.infer<typeof userSchema>) => {
+    return db.users.create(data);
+  },
+  {
+    method: "POST",
+    validate: userSchema,
+  },
+);
+```
+
+```ts
+import { createServerFn } from "catmint/server";
+
+// With a plain validation function
+export const updateSettings = createServerFn(
+  async (input: { theme: string }) => {
+    await db.settings.update(input);
+  },
+  {
+    method: "PUT",
+    validate: (input: unknown) => {
+      if (typeof input !== "object" || input === null) {
+        throw new Error("Input must be an object");
+      }
+      return input as { theme: string };
+    },
+  },
+);
+```
+
+```tsx
+// UserProfile.client.tsx — calling from a client component
+import { getUser } from "./data.fn";
+
+function UserProfile({ id }: { id: string }) {
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    getUser(id).then(setUser);
+  }, [id]);
+
+  return <div>{user?.name}</div>;
+}
+```
+
+## See Also
+
+- [createIsomorphicFn](/framework/api/createIsomorphicFn)
+- [Endpoints](/framework/api/endpoints)
+- [Middleware](/framework/api/middleware)

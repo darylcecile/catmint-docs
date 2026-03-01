@@ -1,0 +1,118 @@
+# httpTransport
+
+Create an HTTP transport for git smart HTTP protocol operations (fetch, push, clone). Uses the Fetch API internally, making it compatible with browsers and server runtimes.
+
+## Import
+
+```typescript
+import { httpTransport } from "@catmint-fs/git";
+```
+
+## Signature
+
+```typescript
+function httpTransport(options?: HttpTransportOptions): HttpTransport;
+```
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `options` | `HttpTransportOptions` | No | Configuration for HTTP requests |
+
+### `HttpTransportOptions`
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `headers` | `Record<string, string>` | `{}` | Additional HTTP headers included in every request |
+
+## Return Value
+
+Returns an `HttpTransport` instance that implements the `GitTransport` interface. This object is passed to repository methods that require network access: [fetch](/fs/git/api/repository#fetch), [push](/fs/git/api/repository#push), [pull](/fs/git/api/repository#pull), and [cloneRepository](/fs/git/api/cloneRepository).
+
+```typescript
+interface GitTransport {
+  discover(url: string, service: string): Promise<TransportDiscovery>;
+  request(url: string, service: string, body: Uint8Array): Promise<Uint8Array>;
+}
+```
+
+## Examples
+
+### Basic Transport
+
+```typescript
+import { httpTransport } from "@catmint-fs/git";
+
+const transport = httpTransport();
+await repo.fetch("origin", { transport });
+```
+
+### With Bearer Token
+
+```typescript
+const transport = httpTransport({
+  headers: {
+    Authorization: "Bearer ghp_xxxxxxxxxxxx",
+  },
+});
+
+await repo.push("origin", { transport });
+```
+
+### With Basic Auth
+
+```typescript
+const credentials = btoa("username:password");
+const transport = httpTransport({
+  headers: {
+    Authorization: `Basic ${credentials}`,
+  },
+});
+```
+
+### Clone with Transport
+
+```typescript
+import { createMemoryLayer } from "@catmint-fs/core";
+import { cloneRepository, httpTransport } from "@catmint-fs/git";
+
+const layer = createMemoryLayer();
+const transport = httpTransport({
+  headers: {
+    Authorization: "Bearer ghp_xxxxxxxxxxxx",
+  },
+});
+
+const repo = await cloneRepository(layer, {
+  url: "https://github.com/user/repo.git",
+  transport,
+});
+```
+
+### Reusing a Transport
+
+A single transport instance can be shared across multiple operations and repositories:
+
+```typescript
+const transport = httpTransport({
+  headers: { Authorization: "Bearer ghp_xxxxxxxxxxxx" },
+});
+
+// Use for clone
+const repo = await cloneRepository(layer, {
+  url: "https://github.com/user/repo.git",
+  transport,
+});
+
+// Reuse for subsequent operations
+await repo.fetch("origin", { transport });
+await repo.push("origin", { transport });
+```
+
+## See Also
+
+- [cloneRepository](/fs/git/api/cloneRepository)
+- [Repository: fetch, push, pull](/fs/git/api/repository)
+- [Remote Operations Guide](/fs/git/guides/remotes)
+- [@catmint-fs/git-auth-node](/fs/git-auth-node/overview)

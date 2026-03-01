@@ -1,0 +1,234 @@
+# Internals
+
+`@catmint-fs/git` exposes lower-level components for advanced use cases. These are the building blocks that the `Repository` class uses internally.
+
+## ObjectDB
+
+`ObjectDB` reads and writes git objects: blobs, trees, commits, and tags. Objects are stored in the standard git loose and packed formats.
+
+```typescript
+import { ObjectDB } from "@catmint-fs/git";
+
+const odb = new ObjectDB(layer);
+
+// Write a blob
+const blobOid = await odb.writeBlob(new TextEncoder().encode("Hello, world!"));
+
+// Read a blob
+const data = await odb.readBlob(blobOid);
+console.log(new TextDecoder().decode(data)); // "Hello, world!"
+
+// Read any object's type and size
+const header = await odb.readHeader(blobOid);
+console.log(header.type); // "blob"
+console.log(header.size); // 13
+```
+
+### Object Types
+
+| Type | Description |
+| --- | --- |
+| `blob` | File content |
+| `tree` | Directory listing (entries with mode, name, and OID) |
+| `commit` | Commit metadata (tree, parents, author, committer, message) |
+| `tag` | Annotated tag (target, tagger, message) |
+
+## RefStore
+
+`RefStore` manages references — branches, tags, HEAD, and symbolic refs.
+
+```typescript
+import { RefStore } from "@catmint-fs/git";
+
+const refs = new RefStore(layer);
+
+// Read HEAD
+const head = await refs.readHead();
+console.log(head); // { type: "symbolic", target: "refs/heads/main" }
+
+// Resolve a ref to a commit OID
+const oid = await refs.resolve("refs/heads/main");
+
+// List all refs
+const allRefs = await refs.list();
+// [{ name: "refs/heads/main", oid: "abc..." }, ...]
+
+// Update a ref
+await refs.write("refs/heads/main", newOid);
+
+// Create a symbolic ref
+await refs.writeSymbolic("HEAD", "refs/heads/feature");
+```
+
+## IndexFile
+
+`IndexFile` reads and writes the `.git/index` file — the staging area.
+
+```typescript
+import { IndexFile } from "@catmint-fs/git";
+
+const index = new IndexFile(layer);
+
+// Read the current index
+const entries = await index.read();
+for (const entry of entries) {
+  console.log(entry.path, entry.oid, entry.mode);
+}
+
+// Add an entry
+await index.addEntry({
+  path: "src/index.ts",
+  oid: blobOid,
+  mode: 0o100644,
+});
+
+// Write the index back to disk
+await index.write();
+```
+
+### Index Entry Fields
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `path` | `string` | File path relative to the repository root |
+| `oid` | `string` | SHA-1 hash of the blob object |
+| `mode` | `number` | File mode (e.g., `0o100644` for regular files, `0o100755` for executables) |
+| `size` | `number` | File size in bytes |
+| `mtime` | `Date` | Last modification time |
+
+## GitConfig
+
+`GitConfig` parses and writes the `.git/config` file in INI-like format.
+
+```typescript
+import { GitConfig } from "@catmint-fs/git";
+
+const config = new GitConfig(layer);
+
+// Read a value
+const name = await config.get("user.name");
+
+// Set a value
+await config.set("user.email", "alice@example.com");
+
+// Delete a value
+await config.delete("user.email");
+
+// Read a section
+const remote = await config.getSection("remote.origin");
+// { url: "https://...", fetch: "+refs/heads/*:refs/remotes/origin/*" }
+```
+
+## GitIgnore
+
+`GitIgnore` evaluates `.gitignore` patterns against file paths.
+
+```typescript
+import { GitIgnore } from "@catmint-fs/git";
+
+const ignore = new GitIgnore(layer);
+
+// Check if a path is ignored
+const ignored = await ignore.isIgnored("node_modules/pkg/index.js");
+console.log(ignored); // true
+
+// Load patterns from a specific .gitignore file
+await ignore.loadPatterns(".gitignore");
+```
+
+## DiffEngine
+
+`DiffEngine` computes line-level diffs between two strings or byte arrays.
+
+```typescript
+import { computeDiffHunks } from "@catmint-fs/git";
+
+const oldContent = "line1\nline2\nline3\n";
+const newContent = "line1\nmodified\nline3\nnew line\n";
+
+const hunks = computeDiffHunks(oldContent, newContent);
+for (const hunk of hunks) {
+  for (const line of hunk.lines) {
+    const prefix = line.type === "add" ? "+" : line.type === "delete" ? "-" : " ";
+    console.log(`${prefix} ${line.content}`);
+  }
+}
+```
+
+## MergeEngine
+
+`MergeEngine` performs three-way merges. It takes a base version and two branch versions and produces either a clean merge result or a list of conflicts.
+
+```typescript
+import { MergeEngine } from "@catmint-fs/git";
+
+const engine = new MergeEngine();
+
+const result = engine.merge({
+  base: "line1\nline2\nline3\n",
+  ours: "line1\nmodified by us\nline3\n",
+  theirs: "line1\nmodified by them\nline3\n",
+});
+
+if (result.conflict) {
+  console.log("Conflict detected");
+  console.log(result.content); // Contains conflict markers
+} else {
+  console.log("Clean merge");
+  console.log(result.content);
+}
+```
+
+## StashManager
+
+`StashManager` manages the stash reflog at `refs/stash`.
+
+```typescript
+import { StashManager } from "@catmint-fs/git";
+
+const stashMgr = new StashManager(layer);
+
+// List stashes
+const entries = await stashMgr.list();
+
+// Push a stash entry
+await stashMgr.push(commitOid, "WIP: feature work");
+
+// Pop the most recent stash
+const oid = await stashMgr.pop();
+
+// Drop by index
+await stashMgr.drop(1);
+```
+
+## On-Disk Format
+
+`@catmint-fs/git` stores data in the standard git format:
+
+```txt
+.git/
+  HEAD                 # Current branch reference
+  config               # Repository configuration
+  refs/
+    heads/             # Branch refs
+    tags/              # Tag refs
+    remotes/           # Remote-tracking refs
+    stash              # Stash ref
+  objects/
+    ab/                # Loose objects (first 2 chars of SHA-1)
+      cdef1234...      # Object file
+    pack/              # Pack files
+      pack-xxx.idx     # Pack index
+      pack-xxx.pack    # Pack data
+  index                # Staging area
+  packed-refs          # Packed references
+```
+
+All objects use the standard git format: `<type> <size>\0<content>`, compressed with zlib (when stored on disk via a filesystem adapter).
+
+## See Also
+
+- [Package Overview](/fs/git/overview)
+- [API: Types](/fs/git/api/types)
+- [API: Repository](/fs/git/api/repository)
+- [@catmint-fs/core](/fs/core/overview)

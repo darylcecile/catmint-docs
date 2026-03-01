@@ -1,0 +1,124 @@
+# Stashing
+
+Stashing saves uncommitted changes so you can switch context and come back to them later, similar to `git stash`.
+
+## Stash Current Changes
+
+```typescript
+await repo.stash({
+  message: "WIP: dashboard layout",
+  author: { name: "Alice", email: "alice@example.com" },
+});
+```
+
+This saves both staged and unstaged changes, then resets the working tree and index to match HEAD.
+
+## Listing Stashes
+
+```typescript
+const stashes = await repo.listStashes();
+for (const stash of stashes) {
+  console.log(stash.index, stash.message);
+  // 0 "WIP: dashboard layout"
+}
+```
+
+Stashes are stored in a stack — the most recent stash is at index `0`.
+
+## Applying a Stash
+
+Apply a stash without removing it from the stack:
+
+```typescript
+// Apply the most recent stash
+await repo.applyStash(0);
+```
+
+The stashed changes are restored to the working tree. The stash entry remains in the stack.
+
+## Popping a Stash
+
+Apply a stash and remove it from the stack in one operation:
+
+```typescript
+await repo.popStash(0);
+```
+
+## Dropping a Stash
+
+Discard a stash without applying it:
+
+```typescript
+await repo.dropStash(0);
+```
+
+## Workflow Example
+
+A common use case: you're in the middle of work and need to switch branches.
+
+```typescript
+import { createMemoryLayer } from "@catmint-fs/core";
+import { initRepository } from "@catmint-fs/git";
+
+const layer = createMemoryLayer();
+const repo = await initRepository(layer);
+const author = { name: "Alice", email: "alice@example.com" };
+
+// Set up initial commit
+await layer.writeFile("/app.ts", "export const app = {}");
+await repo.add("app.ts");
+await repo.commit({ message: "Initial commit", author });
+
+// Start working on a feature
+await layer.writeFile("/feature.ts", "export function feature() {}");
+await repo.add("feature.ts");
+
+// Urgent bug fix needed — stash current work
+await repo.stash({ message: "WIP: new feature", author });
+
+// Working tree is now clean, switch branches
+await repo.createBranch("hotfix");
+await repo.checkout("hotfix");
+
+// Fix the bug
+await layer.writeFile("/app.ts", "export const app = { fixed: true }");
+await repo.add("app.ts");
+await repo.commit({ message: "Fix critical bug", author });
+
+// Switch back and restore stashed work
+await repo.checkout("main");
+await repo.merge("hotfix");
+await repo.popStash(0);
+
+// Continue working on the feature
+const status = await repo.status();
+console.log(status.find((e) => e.path === "feature.ts"));
+```
+
+## Multiple Stashes
+
+You can stack multiple stashes:
+
+```typescript
+// First stash
+await layer.writeFile("/a.ts", "change A");
+await repo.stash({ message: "Work on A", author });
+
+// Second stash
+await layer.writeFile("/b.ts", "change B");
+await repo.stash({ message: "Work on B", author });
+
+const stashes = await repo.listStashes();
+console.log(stashes.length); // 2
+console.log(stashes[0].message); // "Work on B" (most recent)
+console.log(stashes[1].message); // "Work on A"
+
+// Apply the older stash
+await repo.applyStash(1);
+```
+
+## See Also
+
+- [Staging and Commits](/fs/git/guides/staging-commits)
+- [Branching](/fs/git/guides/branches)
+- [API: Repository](/fs/git/api/repository)

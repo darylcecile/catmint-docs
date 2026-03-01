@@ -1,0 +1,120 @@
+# renderPage
+
+Renders a page component in a test environment with full route context. Creates a simulated request and runs it through the framework's routing, middleware, and rendering pipeline. Designed for integration tests.
+
+## Import
+
+```ts
+import { renderPage } from 'catmint/testing'
+```
+
+## Signature
+
+```ts
+function renderPage(
+  path: string,
+  opts?: TestRenderOptions,
+): Promise<TestRenderResult>
+```
+
+```ts
+interface TestRenderOptions {
+  params?: Record<string, string>
+  cookies?: Record<string, string>
+  headers?: Record<string, string>
+  search?: Record<string, string>
+  method?: string
+  body?: BodyInit
+}
+
+interface TestRenderResult {
+  statusCode: number
+  headers: Headers
+  html: string
+  data?: unknown
+}
+```
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `path` | `string` | Yes | The URL path to render (e.g. `'/dashboard'`). |
+| `opts` | `TestRenderOptions` | No | Options to configure the simulated request. |
+
+### TestRenderOptions
+
+| Property | Type | Required | Description |
+|----------|------|----------|-------------|
+| `params` | `Record<string, string>` | No | Route parameters to inject (e.g. `{ id: '42' }`). |
+| `cookies` | `Record<string, string>` | No | Cookies to include in the request. |
+| `headers` | `Record<string, string>` | No | HTTP headers to include in the request. |
+| `search` | `Record<string, string>` | No | URL search/query parameters. |
+| `method` | `string` | No | HTTP method. Defaults to `'GET'`. |
+| `body` | `BodyInit` | No | Request body (only sent for non-GET/HEAD methods). |
+
+## Return Value
+
+Returns a `Promise<TestRenderResult>`:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `statusCode` | `number` | The HTTP status code of the response. |
+| `headers` | `Headers` | The response headers. |
+| `html` | `string` | The rendered HTML string. |
+| `data` | `unknown` | Optional data returned by status responses. |
+
+## Examples
+
+### Basic page render test
+
+```ts
+import { renderPage } from 'catmint/testing'
+
+test('renders the dashboard', async () => {
+  const result = await renderPage('/dashboard', {
+    cookies: { session: 'valid-token' },
+  })
+
+  expect(result.statusCode).toBe(200)
+  expect(result.html).toContain('Dashboard')
+})
+```
+
+### Testing with search params
+
+```ts
+const result = await renderPage('/products', {
+  search: { category: 'shoes', sort: 'price' },
+})
+
+expect(result.statusCode).toBe(200)
+```
+
+### Testing redirects
+
+```ts
+const result = await renderPage('/admin', {
+  // No session cookie — should redirect
+})
+
+expect(result.statusCode).toBe(302)
+expect(result.headers.get('Location')).toBe('/login')
+```
+
+### Testing with a POST body
+
+```ts
+const result = await renderPage('/api/submit', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ name: 'Alice' }),
+})
+
+expect(result.statusCode).toBe(200)
+```
+
+## See Also
+
+- [createTestRequest](/framework/api/createTestRequest)
+- [mockServerFn](/framework/api/mockServerFn)

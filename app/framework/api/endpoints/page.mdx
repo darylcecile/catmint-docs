@@ -1,0 +1,133 @@
+# HTTP Endpoints
+
+API endpoints are defined by exporting named HTTP method handler functions from `endpoint.ts` files within the `app/` directory. Each handler receives a standard Web `Request` and returns a standard `Response`.
+
+## File Convention
+
+Endpoints are defined in files named `endpoint.ts` (or `endpoint.js`) placed inside route directories:
+
+```txt
+app/
+└── api/
+    └── users/
+        └── endpoint.ts    → /api/users
+```
+
+No special import is required — exports follow a naming convention.
+
+## Signature
+
+```ts
+export async function GET(
+  req: Request,
+  context: { params: Record<string, string | string[]> }
+): Promise<Response> | Response
+
+export async function POST(req: Request, context: { params: Record<string, string | string[]> }): Promise<Response> | Response
+export async function PUT(req: Request, context: { params: Record<string, string | string[]> }): Promise<Response> | Response
+export async function PATCH(req: Request, context: { params: Record<string, string | string[]> }): Promise<Response> | Response
+export async function DELETE(req: Request, context: { params: Record<string, string | string[]> }): Promise<Response> | Response
+export async function HEAD(req: Request, context: { params: Record<string, string | string[]> }): Promise<Response> | Response
+export async function OPTIONS(req: Request, context: { params: Record<string, string | string[]> }): Promise<Response> | Response
+```
+
+## Supported Exports
+
+| Export | Description |
+|--------|-------------|
+| `GET` | Handle GET requests. |
+| `POST` | Handle POST requests. |
+| `PUT` | Handle PUT requests. |
+| `PATCH` | Handle PATCH requests. |
+| `DELETE` | Handle DELETE requests. |
+| `HEAD` | Handle HEAD requests. |
+| `OPTIONS` | Handle OPTIONS requests. |
+| `ANY` | Catch-all handler for any HTTP method. |
+| `export default` | Equivalent to `ANY` — handles all methods. |
+
+If both a catch-all (`ANY` / `default`) and a specific method (e.g. `GET`) are exported, the specific method takes precedence.
+
+## Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `req` | `Request` | Standard Web API [Request](https://developer.mozilla.org/en-US/docs/Web/API/Request) object. |
+| `context.params` | `Record<string, string \| string[]>` | Extracted path parameters from dynamic route segments. |
+
+## Return Value
+
+Handlers must return a standard Web API [Response](https://developer.mozilla.org/en-US/docs/Web/API/Response) object (or a `Promise<Response>`).
+
+## Route Conflict Rules
+
+A route directory **cannot** have both a `page.tsx` and an `endpoint.ts` that handles `GET` requests:
+
+| `page.tsx` exists | `endpoint.ts` exports | Allowed? |
+|---|---|---|
+| Yes | `GET`, `ANY`, or `export default` | **No** — build error |
+| Yes | `POST`, `PUT`, `DELETE`, etc. (no GET) | **Yes** |
+| No | Any combination | **Yes** |
+
+## Examples
+
+```ts
+// app/api/users/endpoint.ts
+export async function GET(req: Request) {
+  const users = await db.users.findAll()
+  return Response.json(users)
+}
+
+export async function POST(req: Request) {
+  const body = await req.json()
+  const user = await db.users.create(body)
+  return Response.json(user, { status: 201 })
+}
+```
+
+```ts
+// app/api/users/[id]/endpoint.ts — with typed params
+export async function GET(
+  req: Request,
+  { params }: { params: { id: string } }
+) {
+  const user = await db.users.findById(params.id)
+  if (!user) return new Response(null, { status: 404 })
+  return Response.json(user)
+}
+
+export async function DELETE(
+  req: Request,
+  { params }: { params: { id: string } }
+) {
+  await db.users.delete(params.id)
+  return new Response(null, { status: 204 })
+}
+```
+
+```ts
+// app/api/proxy/[[...path]]/endpoint.ts — catch-all handler
+export async function ANY(
+  req: Request,
+  { params }: { params: { path?: string[] } }
+) {
+  return fetch(
+    `https://upstream.example.com/${params.path?.join('/') ?? ''}`,
+    req
+  )
+}
+```
+
+```txt
+// Coexisting page and POST endpoint
+app/
+└── contact/
+    ├── page.tsx        # Renders the form (GET /contact)
+    └── endpoint.ts     # export async function POST(req) { ... }
+```
+
+## See Also
+
+- [defineRoutes](/framework/api/defineRoutes)
+- [redirect](/framework/api/redirect)
+- [Middleware](/framework/api/middleware)
+- [statusResponse](/framework/api/statusResponse)

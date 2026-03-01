@@ -1,0 +1,134 @@
+# Quick Start
+
+This guide walks through the most common git operations with `@catmint-fs/git`. By the end you will have created a repository, committed files, created a branch, and merged it back.
+
+## Setup
+
+```typescript
+import { createMemoryLayer } from "@catmint-fs/core";
+import { initRepository } from "@catmint-fs/git";
+
+const layer = createMemoryLayer();
+const repo = await initRepository(layer, { defaultBranch: "main" });
+```
+
+## Create Files and Commit
+
+```typescript
+// Write files through the core layer
+await layer.writeFile("/src/index.ts", 'console.log("hello");');
+await layer.writeFile("/README.md", "# My Project");
+
+// Stage and commit
+await repo.add("src/index.ts");
+await repo.add("README.md");
+await repo.commit({
+  message: "Initial commit",
+  author: { name: "Alice", email: "alice@example.com" },
+});
+```
+
+## Check Status and Log
+
+```typescript
+// View the commit history
+const commits = await repo.log();
+console.log(commits[0].message); // "Initial commit"
+
+// Check working tree status
+const status = await repo.status();
+// Returns an array of { path, indexStatus, workingStatus }
+```
+
+## Branch and Merge
+
+```typescript
+// Create and switch to a new branch
+await repo.createBranch("feature/login");
+await repo.checkout("feature/login");
+
+// Make changes on the feature branch
+await layer.writeFile("/src/login.ts", "export function login() {}");
+await repo.add("src/login.ts");
+await repo.commit({
+  message: "Add login module",
+  author: { name: "Alice", email: "alice@example.com" },
+});
+
+// Switch back and merge
+await repo.checkout("main");
+const result = await repo.merge("feature/login");
+console.log(result.type); // "fast-forward" or "merge-commit"
+```
+
+## Diff Changes
+
+```typescript
+// Make a change
+await layer.writeFile("/README.md", "# My Project\n\nUpdated readme.");
+
+// Diff working tree against the index
+const diffs = await repo.diff();
+for (const entry of diffs) {
+  console.log(entry.path, entry.hunks.length, "hunks");
+}
+
+// Diff staged changes against HEAD
+await repo.add("README.md");
+const stagedDiffs = await repo.diff({ staged: true });
+```
+
+## Tags
+
+```typescript
+// Create a lightweight tag
+await repo.createTag("v1.0.0");
+
+// Create an annotated tag
+await repo.createTag("v1.0.0-rc1", {
+  message: "Release candidate 1",
+  tagger: { name: "Alice", email: "alice@example.com" },
+});
+
+// List all tags
+const tags = await repo.listTags();
+```
+
+## Remote Operations
+
+```typescript
+import { httpTransport } from "@catmint-fs/git";
+
+// Add a remote
+await repo.addRemote("origin", "https://github.com/user/repo.git");
+
+// Fetch, pull, push
+const transport = httpTransport();
+await repo.fetch("origin", { transport });
+await repo.pull("origin", { branch: "main", transport });
+await repo.push("origin", { transport });
+```
+
+## Clone an Existing Repository
+
+```typescript
+import { createMemoryLayer } from "@catmint-fs/core";
+import { cloneRepository, httpTransport } from "@catmint-fs/git";
+
+const layer = createMemoryLayer();
+const repo = await cloneRepository(layer, {
+  url: "https://github.com/user/repo.git",
+  transport: httpTransport(),
+});
+
+const commits = await repo.log();
+console.log(`Cloned with ${commits.length} commits`);
+```
+
+## Next Steps
+
+- [Working with Repositories](/fs/git/guides/repositories)
+- [Branching](/fs/git/guides/branches)
+- [Staging and Commits](/fs/git/guides/staging-commits)
+- [Remote Operations](/fs/git/guides/remotes)
+- [API Reference](/fs/git/api/initRepository)

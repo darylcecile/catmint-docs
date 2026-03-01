@@ -1,0 +1,90 @@
+# createIsomorphicFn
+
+Create a function with different implementations for server and client environments. At runtime, the correct implementation is chosen based on the environment. The Vite plugin may also tree-shake the unused implementation at build time.
+
+## Import
+
+```ts
+import { createIsomorphicFn } from 'catmint/server'
+```
+
+## Signature
+
+```ts
+function createIsomorphicFn<TInput, TOutput>(
+  config: IsomorphicFnConfig<TInput, TOutput>,
+): (input: TInput) => Promise<TOutput>
+```
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `config` | `IsomorphicFnConfig<TInput, TOutput>` | Yes | Object with `server` and `client` implementations. |
+
+### `IsomorphicFnConfig<TInput, TOutput>`
+
+```ts
+interface IsomorphicFnConfig<TInput, TOutput> {
+  server: (input: TInput) => Promise<TOutput> | TOutput
+  client: (input: TInput) => Promise<TOutput> | TOutput
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `server` | `(input: TInput) => Promise<TOutput> \| TOutput` | Yes | Implementation that runs on the server. |
+| `client` | `(input: TInput) => Promise<TOutput> \| TOutput` | Yes | Implementation that runs in the browser. |
+
+## Return Value
+
+Returns an async function `(input: TInput) => Promise<TOutput>` that delegates to the appropriate implementation based on the current environment.
+
+Environment detection uses `typeof document === 'undefined'` to distinguish server from client.
+
+## Examples
+
+```ts
+import { createIsomorphicFn } from 'catmint/server'
+
+export const trackEvent = createIsomorphicFn({
+  server: async (event: string) => {
+    await serverAnalytics.track(event)
+  },
+  client: async (event: string) => {
+    window.analytics?.track(event)
+  },
+})
+```
+
+```ts
+import { createIsomorphicFn } from 'catmint/server'
+
+export const getTimezone = createIsomorphicFn({
+  server: (input: void) => {
+    return process.env.TZ ?? 'UTC'
+  },
+  client: (input: void) => {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone
+  },
+})
+```
+
+```ts
+import { createIsomorphicFn } from 'catmint/server'
+
+// Different storage strategies per environment
+export const cacheValue = createIsomorphicFn({
+  server: async ({ key, value }: { key: string; value: string }) => {
+    await redis.set(key, value)
+  },
+  client: async ({ key, value }: { key: string; value: string }) => {
+    localStorage.setItem(key, value)
+  },
+})
+```
+
+## See Also
+
+- [createServerFn](/framework/api/createServerFn)
+- [Endpoints](/framework/api/endpoints)

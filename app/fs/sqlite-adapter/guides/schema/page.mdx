@@ -1,0 +1,102 @@
+# Schema
+
+`@catmint-fs/sqlite-adapter` stores all filesystem state in two SQLite tables: `files` and `metadata`. This page documents the schema and how the adapter uses it.
+
+## Tables
+
+### files
+
+The `files` table stores every filesystem entry -- files, directories, and symlinks.
+
+| Column        | Type      | Description                                                    |
+| ------------- | --------- | -------------------------------------------------------------- |
+| `path`        | `TEXT`    | Absolute path within the virtual filesystem. Primary key.      |
+| `type`        | `TEXT`    | Entry type: `"file"`, `"directory"`, or `"symlink"`.           |
+| `content`     | `BLOB`   | File contents. `NULL` for directories and symlinks.            |
+| `target`      | `TEXT`    | Symlink target path. `NULL` for files and directories.         |
+| `mode`        | `INTEGER` | Unix permission bits (e.g., `0o755`). Default: `0o644` for files, `0o755` for directories. |
+| `uid`         | `INTEGER` | Owner user ID. Default: `0`.                                   |
+| `gid`         | `INTEGER` | Owner group ID. Default: `0`.                                  |
+| `size`        | `INTEGER` | File size in bytes. Computed from `content` length.            |
+| `created_at`  | `TEXT`    | ISO 8601 timestamp of creation.                                |
+| `modified_at` | `TEXT`    | ISO 8601 timestamp of last modification.                       |
+
+### metadata
+
+The `metadata` table stores key-value pairs for adapter-level configuration.
+
+| Column  | Type   | Description              |
+| ------- | ------ | ------------------------ |
+| `key`   | `TEXT` | Metadata key. Primary key. |
+| `value` | `TEXT` | Metadata value.          |
+
+Currently stored metadata includes:
+
+| Key              | Description                                       |
+| ---------------- | ------------------------------------------------- |
+| `caseSensitive`  | Whether path matching is case-sensitive (`"true"` or `"false"`) |
+| `schemaVersion`  | Schema version for future migrations              |
+
+## Schema Initialization
+
+The schema is created automatically when a new `SqliteAdapter` is constructed. If the database already contains the expected tables, they are reused without modification.
+
+You can also initialize the schema manually using the standalone helper:
+
+```typescript
+import Database from "better-sqlite3";
+import { initializeSchema } from "@catmint-fs/sqlite-adapter";
+
+const db = new Database("./my-fs.sqlite");
+initializeSchema(db);
+```
+
+This is useful when you want to set up the database separately from the adapter lifecycle.
+
+## Path Storage
+
+Paths are stored as absolute POSIX-style paths with forward slashes. The root directory is always stored as `"/"`. Directory entries do not include a trailing slash in the `path` column.
+
+```
+/
+/src
+/src/index.ts
+/src/utils
+/src/utils/helpers.ts
+```
+
+When `caseSensitive` is `false`, path lookups use SQLite's `COLLATE NOCASE` to match regardless of casing. The original casing is preserved in storage.
+
+## Content Encoding
+
+File contents are stored as `BLOB` values. Text files are encoded as UTF-8 bytes. Binary files are stored as-is. The `size` column is updated to reflect the byte length of `content` on every write.
+
+## Timestamps
+
+The `created_at` and `modified_at` columns store ISO 8601 timestamps in UTC. These map to the `birthtime` and `mtime` fields returned by `stat()` calls through `@catmint-fs/core`.
+
+## Direct Database Access
+
+If you need to query the database directly, use the `getDatabase()` method on the adapter instance:
+
+```typescript
+import { SqliteAdapter } from "@catmint-fs/sqlite-adapter";
+
+const adapter = new SqliteAdapter({ database: "./my-fs.sqlite" });
+const db = adapter.getDatabase();
+
+// Query all TypeScript files
+const tsFiles = db
+  .prepare("SELECT path, size FROM files WHERE path LIKE '%.ts' AND type = 'file'")
+  .all();
+
+console.log(tsFiles);
+```
+
+The returned object is a [better-sqlite3 `Database`](https://github.com/WiseLibs/better-sqlite3/blob/master/docs/api.md) instance with full access to the underlying SQLite connection.
+
+## See Also
+
+- [Import/Export Guide](/fs/sqlite-adapter/guides/import-export)
+- [Transaction Support](/fs/sqlite-adapter/guides/transactions)
+- [SqliteAdapter API](/fs/sqlite-adapter/api/sqlite-adapter)

@@ -1,0 +1,200 @@
+# FsAdapter
+
+The `FsAdapter` interface defines the contract between a layer and its backing filesystem. Every adapter must implement this interface. The layer delegates read operations to the adapter when no overlay entry exists, and writes changes through the adapter when `apply()` is called.
+
+## Import
+
+```ts
+import type { FsAdapter } from "@catmint-fs/core";
+```
+
+## Signature
+
+```ts
+interface FsAdapter {
+  readFile(path: string): Promise<Uint8Array>;
+  createReadStream(path: string): ReadableStream<Uint8Array>;
+  readdir(path: string): Promise<DirentEntry[]>;
+  stat(path: string): Promise<StatResult>;
+  lstat(path: string): Promise<StatResult>;
+  readlink(path: string): Promise<string>;
+  exists(path: string): Promise<boolean>;
+  writeFile(path: string, data: Uint8Array, options?: WriteOptions): Promise<void>;
+  mkdir(path: string, options?: MkdirOptions): Promise<void>;
+  rm(path: string, options?: RmOptions): Promise<void>;
+  rmdir(path: string): Promise<void>;
+  rename(from: string, to: string): Promise<void>;
+  symlink(target: string, path: string): Promise<void>;
+  chmod(path: string, mode: number): Promise<void>;
+  chown(path: string, uid: number, gid: number): Promise<void>;
+  lchown(path: string, uid: number, gid: number): Promise<void>;
+  checkPermission(path: string, op: PermissionOp): Promise<void>;
+  capabilities(): AdapterCapabilities;
+  initialize?(root: string): Promise<void>;
+}
+```
+
+## Methods
+
+### Reading
+
+| Method | Parameters | Return | Description |
+| --- | --- | --- | --- |
+| `readFile` | `path: string` | `Promise<Uint8Array>` | Read the full contents of a file |
+| `createReadStream` | `path: string` | `ReadableStream<Uint8Array>` | Create a readable stream for a file |
+| `readdir` | `path: string` | `Promise<DirentEntry[]>` | List directory entries |
+| `stat` | `path: string` | `Promise<StatResult>` | Get file metadata (follows symlinks) |
+| `lstat` | `path: string` | `Promise<StatResult>` | Get file metadata (does not follow symlinks) |
+| `readlink` | `path: string` | `Promise<string>` | Read the target of a symlink |
+| `exists` | `path: string` | `Promise<boolean>` | Check if a path exists |
+
+### Writing
+
+| Method | Parameters | Return | Description |
+| --- | --- | --- | --- |
+| `writeFile` | `path: string, data: Uint8Array, options?: WriteOptions` | `Promise<void>` | Write data to a file |
+| `mkdir` | `path: string, options?: MkdirOptions` | `Promise<void>` | Create a directory |
+| `rm` | `path: string, options?: RmOptions` | `Promise<void>` | Remove a file or directory |
+| `rmdir` | `path: string` | `Promise<void>` | Remove an empty directory |
+| `rename` | `from: string, to: string` | `Promise<void>` | Rename or move an entry |
+| `symlink` | `target: string, path: string` | `Promise<void>` | Create a symbolic link |
+
+### Permissions
+
+| Method | Parameters | Return | Description |
+| --- | --- | --- | --- |
+| `chmod` | `path: string, mode: number` | `Promise<void>` | Change file permission mode |
+| `chown` | `path: string, uid: number, gid: number` | `Promise<void>` | Change file ownership |
+| `lchown` | `path: string, uid: number, gid: number` | `Promise<void>` | Change symlink ownership |
+| `checkPermission` | `path: string, op: PermissionOp` | `Promise<void>` | Validate that an operation is permitted |
+
+### Metadata
+
+| Method | Parameters | Return | Description |
+| --- | --- | --- | --- |
+| `capabilities` | — | `AdapterCapabilities` | Declare adapter feature support |
+| `initialize` | `root: string` | `Promise<void>` | *(Optional)* One-time setup with the layer root |
+
+## AdapterCapabilities
+
+```ts
+interface AdapterCapabilities {
+  permissions: boolean;
+  symlinks: boolean;
+  caseSensitive: boolean;
+}
+```
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `permissions` | `boolean` | Whether `chmod`, `chown`, and `lchown` are supported |
+| `symlinks` | `boolean` | Whether `symlink` and `readlink` are supported |
+| `caseSensitive` | `boolean` | Whether the filesystem treats paths as case-sensitive |
+
+## Examples
+
+### Implementing a minimal adapter
+
+```ts
+import type {
+  FsAdapter,
+  AdapterCapabilities,
+  StatResult,
+  DirentEntry,
+  PermissionOp,
+} from "@catmint-fs/core";
+
+class MyAdapter implements FsAdapter {
+  async readFile(path: string): Promise<Uint8Array> {
+    // Fetch file contents from your storage
+  }
+
+  createReadStream(path: string): ReadableStream<Uint8Array> {
+    // Return a ReadableStream for the file
+  }
+
+  async readdir(path: string): Promise<DirentEntry[]> {
+    // List directory contents
+  }
+
+  async stat(path: string): Promise<StatResult> {
+    // Return file metadata, following symlinks
+  }
+
+  async lstat(path: string): Promise<StatResult> {
+    // Return file metadata, not following symlinks
+  }
+
+  async readlink(path: string): Promise<string> {
+    throw new Error("Symlinks not supported");
+  }
+
+  async exists(path: string): Promise<boolean> {
+    // Check if path exists
+  }
+
+  async writeFile(path: string, data: Uint8Array): Promise<void> {
+    // Write file data
+  }
+
+  async mkdir(path: string): Promise<void> {
+    // Create a directory
+  }
+
+  async rm(path: string): Promise<void> {
+    // Remove a file or directory
+  }
+
+  async rmdir(path: string): Promise<void> {
+    // Remove an empty directory
+  }
+
+  async rename(from: string, to: string): Promise<void> {
+    // Move/rename an entry
+  }
+
+  async symlink(target: string, path: string): Promise<void> {
+    throw new Error("Symlinks not supported");
+  }
+
+  async chmod(path: string, mode: number): Promise<void> {
+    throw new Error("Permissions not supported");
+  }
+
+  async chown(path: string, uid: number, gid: number): Promise<void> {
+    throw new Error("Permissions not supported");
+  }
+
+  async lchown(path: string, uid: number, gid: number): Promise<void> {
+    throw new Error("Permissions not supported");
+  }
+
+  async checkPermission(path: string, op: PermissionOp): Promise<void> {
+    // No-op: allow all operations
+  }
+
+  capabilities(): AdapterCapabilities {
+    return {
+      permissions: false,
+      symlinks: false,
+      caseSensitive: true,
+    };
+  }
+}
+```
+
+### Using a custom adapter
+
+```ts
+import { createLayer } from "@catmint-fs/core";
+
+const adapter = new MyAdapter();
+const layer = createLayer({ root: "/", adapter });
+```
+
+## See Also
+
+- [LocalAdapter](/fs/core/api/local-adapter) — built-in Node.js adapter
+- [Custom Adapters guide](/fs/core/guides/custom-adapters) — step-by-step guide to building an adapter
+- [Adapters guide](/fs/core/guides/adapters) — adapter concepts and capabilities
+- [SqliteAdapter](/fs/sqlite-adapter/overview) — SQLite-backed adapter

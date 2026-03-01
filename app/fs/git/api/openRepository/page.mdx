@@ -1,0 +1,90 @@
+# openRepository
+
+Open an existing git repository from a [@catmint-fs/core](/fs/core/overview) layer. The layer must already contain a valid `.git` directory.
+
+## Import
+
+```typescript
+import { openRepository } from "@catmint-fs/git";
+```
+
+## Signature
+
+```typescript
+function openRepository(layer: Layer): Promise<Repository>;
+```
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `layer` | `Layer` | Yes | A [@catmint-fs/core](/fs/core/overview) layer containing an existing git repository |
+
+## Return Value
+
+Returns a `Promise<Repository>` — a [Repository](/fs/git/api/repository) instance.
+
+Throws an error if the layer does not contain a valid git repository (i.e., no `.git/HEAD` found).
+
+## Examples
+
+### Open From Memory
+
+```typescript
+import { createMemoryLayer } from "@catmint-fs/core";
+import { initRepository, openRepository } from "@catmint-fs/git";
+
+// Create a repo first
+const layer = createMemoryLayer();
+await initRepository(layer);
+
+// Later, re-open it
+const repo = await openRepository(layer);
+const branch = await repo.currentBranch();
+console.log(branch); // "main"
+```
+
+### Open From the Filesystem
+
+```typescript
+import { createNodeLayer } from "@catmint-fs/core";
+import { openRepository } from "@catmint-fs/git";
+
+const layer = createNodeLayer("/path/to/existing-project");
+const repo = await openRepository(layer);
+
+const commits = await repo.log();
+console.log(`Repository has ${commits.length} commits`);
+```
+
+### Open From SQLite
+
+```typescript
+import { createSqliteLayer } from "@catmint-fs/sqlite-adapter";
+import { openRepository } from "@catmint-fs/git";
+
+const layer = createSqliteLayer("repo.db");
+const repo = await openRepository(layer);
+```
+
+### Error Handling
+
+```typescript
+import { createMemoryLayer } from "@catmint-fs/core";
+import { openRepository } from "@catmint-fs/git";
+
+const layer = createMemoryLayer(); // Empty layer, no repo
+
+try {
+  await openRepository(layer);
+} catch (err) {
+  console.error("Not a git repository");
+}
+```
+
+## See Also
+
+- [initRepository](/fs/git/api/initRepository)
+- [cloneRepository](/fs/git/api/cloneRepository)
+- [Repository API](/fs/git/api/repository)
+- [Repositories Guide](/fs/git/guides/repositories)

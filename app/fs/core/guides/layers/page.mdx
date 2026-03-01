@@ -1,0 +1,183 @@
+# Layers
+
+A layer is the core abstraction in `@catmint-fs/core`. It provides a virtual filesystem view over a backing store, capturing all writes in an in-memory overlay while transparently reading from the underlying adapter.
+
+## Creating a Layer
+
+Use `createLayer` to create a new layer:
+
+```ts
+import { createLayer } from "@catmint-fs/core";
+
+const layer = createLayer({ root: "/absolute/path" });
+```
+
+The `root` must be an absolute path. It defines the scope of the layer — all file paths are resolved relative to this root. The default adapter is `LocalAdapter`, which reads from the local disk using Node.js `fs` APIs.
+
+To use a different adapter, pass it in the options:
+
+```ts
+import { createLayer } from "@catmint-fs/core";
+import { SqliteAdapter } from "@catmint-fs/sqlite-adapter";
+
+const adapter = new SqliteAdapter({ database: "fs.db" });
+const layer = createLayer({ root: "/", adapter });
+```
+
+## Reading Files
+
+Layer read operations check the overlay first. If the file has been written, renamed, or deleted in the layer, the overlay answers the request. Otherwise, the request falls through to the adapter.
+
+```ts
+// Read a file as Uint8Array
+const data = await layer.readFile("/src/index.ts");
+const text = new TextDecoder().decode(data);
+
+// Read a file as a stream
+const stream = await layer.createReadStream("/large-file.bin");
+
+// List directory contents
+const entries = await layer.readdir("/src");
+for (const entry of entries) {
+  console.log(entry.name, entry.type); // "index.ts" "file"
+}
+
+// Check file metadata
+const info = await layer.stat("/package.json");
+console.log(info.type, info.size); // "file" 1234
+
+// Check existence
+const fileExists = await layer.exists("/README.md");
+```
+
+### Overlay Behavior
+
+If a file has been deleted through the layer, reading it throws an error even if it still exists on the backing filesystem:
+
+```ts
+await layer.rm("/old-file.txt");
+
+// This throws even if /old-file.txt exists on disk
+await layer.readFile("/old-file.txt"); // Error: ENOENT
+```
+
+If a file has been written through the layer, the in-memory version is returned:
+
+```ts
+await layer.writeFile("/config.ts", new TextEncoder().encode("new content"));
+
+// Returns "new content", not the disk version
+const data = await layer.readFile("/config.ts");
+```
+
+## Writing Files
+
+All writes are captured in the overlay. The backing filesystem is never modified until you call `apply()`.
+
+```ts
+const encoder = new TextEncoder();
+
+// Write a file (creates parent directories are not auto-created)
+await layer.writeFile("/src/app.ts", encoder.encode("export default {};\n"));
+
+// Create a directory
+await layer.mkdir("/src/utils");
+
+// Create nested directories
+await layer.mkdir("/src/components/ui", { recursive: true });
+
+// Rename a file or directory
+await layer.rename("/src/app.ts", "/src/main.ts");
+
+// Delete a file
+await layer.rm("/src/old.ts");
+
+// Delete a directory recursively
+await layer.rm("/src/deprecated", { recursive: true });
+```
+
+### Write Options
+
+`writeFile` accepts an optional options object:
+
+```ts
+await layer.writeFile("/script.sh", data, {
+  mode: 0o755,  // Set file permissions
+});
+```
+
+## Layer Lifecycle
+
+A layer has three lifecycle operations:
+
+### apply()
+
+Writes all pending changes to the backing filesystem through the adapter. After a successful apply, the overlay is cleared:
+
+```ts
+const result = await layer.apply();
+console.log(result.applied); // Number of changes applied
+console.log(result.errors);  // Any errors that occurred
+```
+
+See [Applying Changes](/fs/core/guides/applying-changes) for details on best-effort vs. transactional mode.
+
+### reset()
+
+Discards all pending changes. The overlay is cleared and the layer returns to a clean state reflecting only the backing filesystem:
+
+```ts
+layer.reset();
+
+// All pending changes are gone
+const changes = layer.getChanges();
+console.log(changes.length); // 0
+```
+
+### dispose()
+
+Releases all resources held by the layer. After disposal, the layer should not be used:
+
+```ts
+layer.dispose();
+```
+
+## Combining Lifecycle Operations
+
+A typical workflow involves creating a layer, making changes, inspecting them, and then either applying or resetting:
+
+```ts
+import { createLayer } from "@catmint-fs/core";
+
+const layer = createLayer({ root: "/path/to/project" });
+
+// Make changes
+await layer.writeFile("/new-file.ts", new TextEncoder().encode("content"));
+await layer.rm("/old-file.ts");
+
+// Inspect
+const changes = layer.getChanges();
+console.log(`${changes.length} pending changes`);
+
+// Decide
+if (userApproved) {
+  await layer.apply();
+} else {
+  layer.reset();
+}
+
+layer.dispose();
+```
+
+## Case Sensitivity
+
+Case sensitivity is determined by the host filesystem and detected at layer creation time. On case-insensitive systems (macOS HFS+, Windows NTFS), paths like `/Readme.md` and `/readme.md` refer to the same file. On case-sensitive systems (Linux ext4), they are treated as distinct files.
+
+The layer delegates case sensitivity detection to the adapter via `capabilities().caseSensitive`.
+
+## See Also
+
+- [createLayer API](/fs/core/api/createLayer) — full API reference
+- [Layer API](/fs/core/api/layer) — all layer methods
+- [Adapters](/fs/core/guides/adapters) — how adapters work
+- [Change Tracking](/fs/core/guides/change-tracking) — inspecting pending changes

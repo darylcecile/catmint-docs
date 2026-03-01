@@ -1,0 +1,137 @@
+# Applying Changes
+
+When you call `apply()` on a layer, all pending changes are written to the backing filesystem through the adapter. The layer supports two modes: **best-effort** (default) and **transactional**.
+
+## Best-Effort Mode
+
+In best-effort mode, the layer writes each change sequentially. If one change fails, the error is recorded and the remaining changes are still attempted:
+
+```ts
+const result = await layer.apply();
+
+console.log(result.applied); // Number of successfully applied changes
+console.log(result.errors);  // Array of ApplyError objects
+```
+
+This is the default behavior and is suitable for most use cases. It maximizes the number of changes that succeed even when some operations fail (e.g., due to permission issues on specific files).
+
+### ApplyResult
+
+```ts
+interface ApplyResult {
+  applied: number;
+  errors: ApplyError[];
+}
+```
+
+### ApplyError
+
+```ts
+interface ApplyError {
+  path: string;
+  error: Error;
+}
+```
+
+Each `ApplyError` records which path failed and the underlying error. You can inspect these to decide whether to retry, log, or handle them:
+
+```ts
+const result = await layer.apply();
+
+for (const err of result.errors) {
+  console.error(`Failed to apply ${err.path}: ${err.error.message}`);
+}
+```
+
+## Transactional Mode
+
+In transactional mode, the layer captures the original state of each file before writing. If any change fails, all previously applied changes are reverted to restore the original state:
+
+```ts
+const result = await layer.apply({ transaction: true });
+```
+
+If a failure occurs, the layer throws a `TransactionError` instead of returning an `ApplyResult`:
+
+```ts
+try {
+  await layer.apply({ transaction: true });
+} catch (err) {
+  if (err instanceof TransactionError) {
+    console.error("Transaction failed:", err.message);
+    console.error("Failed at:", err.failedPath);
+    console.error("Reverted:", err.revertedCount, "changes");
+  }
+}
+```
+
+### When to Use Transactional Mode
+
+Use transactional mode when:
+- All changes must succeed or none should be applied
+- You are making coordinated changes that depend on each other
+- Partial application would leave the filesystem in an inconsistent state
+
+Use best-effort mode when:
+- Changes are independent and partial success is acceptable
+- You want to maximize the number of applied changes
+- You will handle individual errors after the apply completes
+
+## Apply Ordering
+
+Changes are applied in a specific order to ensure correctness. The layer groups and orders operations as follows:
+
+1. **Directory creates** — shallowest first, so parent directories exist before children
+2. **File and symlink creates & updates** — written after their parent directories exist
+3. **Renames** — applied after creates so both source and destination paths are valid
+4. **chmod / chown** — applied after all files exist in their final locations
+5. **File and symlink deletes** — removed after renames are complete
+6. **Directory deletes** — deepest first, so children are removed before parents
+
+This ordering guarantees that:
+- A directory exists before a file is created inside it
+- A file exists before its permissions are changed
+- Children are deleted before their parent directory is removed
+
+### Example
+
+Given these operations:
+
+```ts
+await layer.mkdir("/src/components");
+await layer.writeFile("/src/components/Button.ts", data);
+await layer.chmod("/src/components/Button.ts", 0o644);
+await layer.rm("/src/old-utils");
+await layer.rename("/src/helpers.ts", "/src/utils.ts");
+```
+
+The apply order would be:
+
+1. `mkdir /src/components`
+2. `writeFile /src/components/Button.ts`
+3. `rename /src/helpers.ts → /src/utils.ts`
+4. `chmod /src/components/Button.ts`
+5. `rm /src/old-utils`
+
+## Post-Apply State
+
+After a successful `apply()`, the layer's overlay is cleared. The layer returns to a clean state where reads pass through directly to the adapter (which now reflects the applied changes):
+
+```ts
+await layer.apply();
+
+// Overlay is empty
+const changes = layer.getChanges();
+console.log(changes.length); // 0
+
+// Reads now come from the adapter (with applied changes)
+const data = await layer.readFile("/src/components/Button.ts");
+```
+
+If apply is in best-effort mode and some changes fail, only the successfully applied changes are cleared from the overlay. Failed changes remain pending.
+
+## See Also
+
+- [Change Tracking](/fs/core/guides/change-tracking) — inspecting changes before applying
+- [Layer API](/fs/core/api/layer) — `apply()` method reference
+- [Types](/fs/core/api/types) — `ApplyResult`, `ApplyError`, and `TransactionError`

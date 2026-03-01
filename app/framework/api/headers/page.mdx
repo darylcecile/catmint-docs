@@ -1,0 +1,63 @@
+# headers
+
+Get read-only access to the incoming request headers. Must be called within a server request context (server component, server function, middleware, or API route handler).
+
+## Import
+
+```ts
+import { headers } from 'catmint/server'
+```
+
+## Signature
+
+```ts
+async function headers(): Promise<ReadonlyHeaders>
+```
+
+## Parameters
+
+This function takes no parameters.
+
+## Return Value
+
+Returns a `Promise<ReadonlyHeaders>` — a frozen object exposing only the read methods of the standard `Headers` API, preventing accidental mutation of request headers.
+
+### `ReadonlyHeaders`
+
+```ts
+type ReadonlyHeaders = Pick<
+  Headers,
+  'get' | 'has' | 'entries' | 'keys' | 'values' | 'forEach'
+>
+```
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `get` | `(name: string) => string \| null` | Get a header value by name |
+| `has` | `(name: string) => boolean` | Check if a header exists |
+| `entries` | `() => IterableIterator<[string, string]>` | Iterate over all header entries |
+| `keys` | `() => IterableIterator<string>` | Iterate over all header names |
+| `values` | `() => IterableIterator<string>` | Iterate over all header values |
+| `forEach` | `(callback: (value: string, key: string, parent: Headers) => void) => void` | Call a function for each header |
+
+## Examples
+
+```ts
+import { headers } from 'catmint/server'
+
+const h = await headers()
+const userAgent = h.get('user-agent')
+const hasAuth = h.has('authorization')
+```
+
+```ts
+// Iterate over all headers
+const h = await headers()
+for (const [name, value] of h.entries()) {
+  console.log(`${name}: ${value}`)
+}
+```
+
+## See Also
+
+- [cookies](/framework/api/cookies)

@@ -1,0 +1,65 @@
+# Installation
+
+Install `@catmint-fs/git` and its peer dependency `@catmint-fs/core`.
+
+## Requirements
+
+- **TypeScript 5.0** or later
+- **@catmint-fs/core** — provides the storage layer abstraction
+
+No native dependencies are required. The package works in Node.js, Deno, Bun, and modern browsers.
+
+## Install
+
+```bash
+npm install @catmint-fs/git @catmint-fs/core
+```
+
+```bash
+pnpm add @catmint-fs/git @catmint-fs/core
+```
+
+```bash
+yarn add @catmint-fs/git @catmint-fs/core
+```
+
+## Optional Packages
+
+Depending on your use case, you may also want these companion packages:
+
+| Package | Purpose | Install |
+| --- | --- | --- |
+| [@catmint-fs/sqlite-adapter](/fs/sqlite-adapter/overview) | Persistent storage via SQLite | `npm install @catmint-fs/sqlite-adapter` |
+| [@catmint-fs/git-auth-node](/fs/git-auth-node/overview) | Credential helpers for Node.js (SSH keys, tokens) | `npm install @catmint-fs/git-auth-node` |
+
+## Verify Installation
+
+```typescript
+import { createMemoryLayer } from "@catmint-fs/core";
+import { initRepository } from "@catmint-fs/git";
+
+const layer = createMemoryLayer();
+const repo = await initRepository(layer);
+console.log(await repo.currentBranch()); // "main"
+```
+
+If this runs without errors, you're ready to go.
+
+## TypeScript Configuration
+
+`@catmint-fs/git` ships with full type declarations. No additional `@types` packages are needed. Make sure your `tsconfig.json` includes:
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler"
+  }
+}
+```
+
+## Next Steps
+
+- [Quick Start](/fs/git/quick-start)
+- [Package Overview](/fs/git/overview)

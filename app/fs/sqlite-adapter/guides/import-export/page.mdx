@@ -1,0 +1,143 @@
+# Import and Export
+
+`@catmint-fs/sqlite-adapter` can import files from a real directory on disk into the SQLite database and export the database contents back to disk. This page covers both the adapter methods and the standalone helper functions.
+
+## Importing from Disk
+
+### Using the Adapter
+
+The `importFrom` method recursively copies all files, directories, and symlinks from a source path into the virtual filesystem:
+
+```typescript
+import { SqliteAdapter } from "@catmint-fs/sqlite-adapter";
+import { CatmintFs } from "@catmint-fs/core";
+
+const adapter = new SqliteAdapter({ database: ":memory:" });
+const fs = new CatmintFs(adapter);
+
+// Import an entire project
+await adapter.importFrom("./my-project");
+
+// Files are now accessible through the virtual filesystem
+const files = await fs.readdir("/");
+console.log(files); // ["package.json", "src", "tsconfig.json", ...]
+```
+
+The import operation:
+
+- Walks the source directory recursively
+- Preserves file permissions (mode, uid, gid)
+- Preserves symlinks (stored as symlink entries, not resolved)
+- Records file sizes and timestamps
+- Runs inside a SQLite transaction for atomicity
+
+### Using the Standalone Helper
+
+If you are managing the database connection yourself, use the standalone `importFrom` function:
+
+```typescript
+import Database from "better-sqlite3";
+import { initializeSchema, importFrom } from "@catmint-fs/sqlite-adapter";
+
+const db = new Database("./snapshot.sqlite");
+initializeSchema(db);
+
+await importFrom(db, "./my-project");
+```
+
+### Import Behavior
+
+| Scenario                    | Behavior                                          |
+| --------------------------- | ------------------------------------------------- |
+| File already exists in DB   | Overwritten with the new content and metadata      |
+| Directory already exists    | Merged (existing files in DB are not deleted)      |
+| Symlink on disk             | Stored as a symlink entry with the target path     |
+| Binary file                 | Stored as a BLOB without encoding transformation   |
+| Empty directory             | Created as a directory entry with no children      |
+
+### Filtering Files
+
+The import operation copies everything in the source directory. To filter files, pre-process the source directory or use the `@catmint-fs/core` API to remove unwanted entries after import:
+
+```typescript
+await adapter.importFrom("./my-project");
+
+// Remove node_modules after import
+await fs.rm("/node_modules", { recursive: true });
+```
+
+## Exporting to Disk
+
+### Using the Adapter
+
+The `exportTo` method writes the entire virtual filesystem to a directory on disk:
+
+```typescript
+const adapter = new SqliteAdapter({ database: "./my-fs.sqlite" });
+
+// Export to a new directory
+await adapter.exportTo("./output");
+```
+
+The export operation:
+
+- Creates the destination directory if it does not exist
+- Recreates the full directory tree
+- Writes all file contents
+- Restores symlinks
+- Applies file permissions (mode)
+
+### Using the Standalone Helper
+
+```typescript
+import Database from "better-sqlite3";
+import { exportTo } from "@catmint-fs/sqlite-adapter";
+
+const db = new Database("./snapshot.sqlite");
+await exportTo(db, "./output");
+```
+
+### Export Behavior
+
+| Scenario                      | Behavior                                       |
+| ----------------------------- | ---------------------------------------------- |
+| Destination directory exists  | Files are written into it (existing files may be overwritten) |
+| Destination does not exist    | Created automatically                          |
+| Symlink in database           | Recreated as a symlink on disk                 |
+| File permissions              | Applied via `chmod` after writing               |
+
+## Round-Trip Example
+
+A common pattern is to capture a filesystem snapshot, perform operations on it, and write the results back to disk:
+
+```typescript
+import { SqliteAdapter } from "@catmint-fs/sqlite-adapter";
+import { CatmintFs } from "@catmint-fs/core";
+
+// Capture a snapshot
+const adapter = new SqliteAdapter({ database: "./snapshot.sqlite" });
+const fs = new CatmintFs(adapter);
+await adapter.importFrom("./my-project");
+
+// Modify files in the virtual filesystem
+const pkg = JSON.parse(await fs.readFile("/package.json", "utf8"));
+pkg.version = "2.0.0";
+await fs.writeFile("/package.json", JSON.stringify(pkg, null, 2));
+
+// Export the modified filesystem
+await adapter.exportTo("./my-project-v2");
+
+await adapter.close();
+```
+
+## Performance Tips
+
+- **Use in-memory databases for temporary work.** In-memory databases avoid disk I/O during the operation and are automatically cleaned up.
+- **Import runs in a transaction.** Importing a large directory is efficient because all writes are batched in a single SQLite transaction.
+- **Close the adapter when done.** This releases the database connection and any associated file locks.
+
+## See Also
+
+- [Schema Reference](/fs/sqlite-adapter/guides/schema)
+- [Transaction Support](/fs/sqlite-adapter/guides/transactions)
+- [SqliteAdapter API](/fs/sqlite-adapter/api/sqlite-adapter)

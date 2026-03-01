@@ -1,0 +1,111 @@
+# Quick Start
+
+This guide walks through the basic usage of `@catmint-fs/sqlite-adapter` -- creating a filesystem, reading and writing files, and importing from disk.
+
+## Create an In-Memory Filesystem
+
+The simplest way to get started is with an in-memory database. Pass `":memory:"` as the database path:
+
+```typescript
+import { SqliteAdapter } from "@catmint-fs/sqlite-adapter";
+import { CatmintFs } from "@catmint-fs/core";
+
+const adapter = new SqliteAdapter({ database: ":memory:" });
+const fs = new CatmintFs(adapter);
+```
+
+All data lives in memory and is discarded when the process exits.
+
+## Create a Persistent Filesystem
+
+To persist the filesystem across process restarts, provide a file path:
+
+```typescript
+const adapter = new SqliteAdapter({ database: "./my-project.sqlite" });
+const fs = new CatmintFs(adapter);
+```
+
+The database file is created automatically if it does not exist. The schema is initialized on first use.
+
+## Read and Write Files
+
+Use the standard `@catmint-fs/core` API to interact with the filesystem:
+
+```typescript
+// Write a file
+await fs.writeFile("/hello.txt", "Hello, world!");
+
+// Read it back
+const content = await fs.readFile("/hello.txt", "utf8");
+console.log(content); // "Hello, world!"
+
+// Create a directory
+await fs.mkdir("/src", { recursive: true });
+
+// Write a file in the directory
+await fs.writeFile("/src/index.ts", 'export const version = "1.0.0";');
+
+// List directory contents
+const entries = await fs.readdir("/src");
+console.log(entries); // ["index.ts"]
+```
+
+## Import a Directory from Disk
+
+You can populate the SQLite filesystem from a real directory on the host:
+
+```typescript
+const adapter = new SqliteAdapter({ database: ":memory:" });
+const fs = new CatmintFs(adapter);
+
+// Import all files from a local directory
+await adapter.importFrom("./my-project");
+
+// Files are now available in the virtual filesystem
+const pkg = await fs.readFile("/package.json", "utf8");
+console.log(JSON.parse(pkg).name);
+```
+
+## Export Back to Disk
+
+Write the entire filesystem tree to a directory:
+
+```typescript
+await adapter.exportTo("./output");
+```
+
+This creates the directory structure and writes all files, preserving permissions and symlinks.
+
+## Case-Insensitive Mode
+
+For environments that need case-insensitive path matching (e.g., simulating a macOS or Windows filesystem):
+
+```typescript
+const adapter = new SqliteAdapter({
+  database: ":memory:",
+  caseSensitive: false,
+});
+const fs = new CatmintFs(adapter);
+
+await fs.writeFile("/README.md", "# Hello");
+
+// Both paths resolve to the same file
+const a = await fs.readFile("/README.md", "utf8");
+const b = await fs.readFile("/readme.md", "utf8");
+console.log(a === b); // true
+```
+
+## Clean Up
+
+When you are done with the adapter, close it to release the database connection:
+
+```typescript
+await adapter.close();
+```
+
+## Next Steps
+
+- [Schema Reference](/fs/sqlite-adapter/guides/schema) -- understand the underlying database structure
+- [Import/Export Guide](/fs/sqlite-adapter/guides/import-export) -- advanced import and export patterns
+- [Transaction Support](/fs/sqlite-adapter/guides/transactions) -- batch operations and consistency
+- [SqliteAdapter API](/fs/sqlite-adapter/api/sqlite-adapter) -- full API reference

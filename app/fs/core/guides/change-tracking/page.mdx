@@ -1,0 +1,178 @@
+# Change Tracking
+
+Layers track every mutation made through their API. You can inspect pending changes at any time before applying or resetting them. This is useful for building diffs, confirmation prompts, dry-run modes, and audit logs.
+
+## Listing Changes
+
+Use `getChanges()` to retrieve all pending changes as an array of `ChangeEntry` objects:
+
+```ts
+import { createLayer } from "@catmint-fs/core";
+
+const layer = createLayer({ root: "/path/to/project" });
+const encoder = new TextEncoder();
+
+await layer.writeFile("/src/new-file.ts", encoder.encode("export default {};\n"));
+await layer.rm("/src/old-file.ts");
+await layer.mkdir("/src/utils");
+await layer.rename("/src/app.ts", "/src/main.ts");
+
+const changes = layer.getChanges();
+
+for (const change of changes) {
+  console.log(`${change.type} ${change.path}`);
+}
+// create  /src/new-file.ts
+// delete  /src/old-file.ts
+// create  /src/utils
+// rename  /src/app.ts -> /src/main.ts
+```
+
+### ChangeEntry
+
+Each entry in the array returned by `getChanges()` is a `ChangeEntry`:
+
+```ts
+interface ChangeEntry {
+  type: "create" | "update" | "delete" | "rename" | "chmod" | "chown";
+  path: string;
+  entryType: EntryType; // "file" | "directory" | "symlink"
+}
+```
+
+| Field | Description |
+| --- | --- |
+| `type` | The kind of change: `create`, `update`, `delete`, `rename`, `chmod`, or `chown` |
+| `path` | The absolute path (relative to root) of the affected entry |
+| `entryType` | Whether the entry is a `file`, `directory`, or `symlink` |
+
+## Getting Change Details
+
+For more detailed information about a specific change, use `getChangeDetail()`:
+
+```ts
+const detail = layer.getChangeDetail("/src/new-file.ts");
+console.log(detail);
+// {
+//   type: "create",
+//   path: "/src/new-file.ts",
+//   entryType: "file",
+// }
+```
+
+If the path has no pending changes, `getChangeDetail()` returns `null`:
+
+```ts
+const detail = layer.getChangeDetail("/untouched-file.ts");
+console.log(detail); // null
+```
+
+### ChangeDetail
+
+The `ChangeDetail` type extends `ChangeEntry` with additional context depending on the change type:
+
+```ts
+interface ChangeDetail extends ChangeEntry {
+  renameTo?: string;   // For rename changes, the destination path
+  mode?: number;       // For chmod changes, the new mode
+  uid?: number;        // For chown changes, the new uid
+  gid?: number;        // For chown changes, the new gid
+}
+```
+
+Example for a rename:
+
+```ts
+await layer.rename("/src/old.ts", "/src/new.ts");
+
+const detail = layer.getChangeDetail("/src/old.ts");
+console.log(detail);
+// {
+//   type: "rename",
+//   path: "/src/old.ts",
+//   entryType: "file",
+//   renameTo: "/src/new.ts"
+// }
+```
+
+## Change Semantics
+
+### Overwrites Become Updates
+
+Writing to a file that already exists on the backing filesystem produces an `update` change, not a `create`:
+
+```ts
+// Assuming /package.json exists on disk
+await layer.writeFile("/package.json", encoder.encode("{}"));
+
+const detail = layer.getChangeDetail("/package.json");
+console.log(detail?.type); // "update"
+```
+
+### Multiple Writes Coalesce
+
+If you write to the same file multiple times, only one change entry exists. It reflects the final state:
+
+```ts
+await layer.writeFile("/config.ts", encoder.encode("v1"));
+await layer.writeFile("/config.ts", encoder.encode("v2"));
+
+const changes = layer.getChanges();
+// Only one entry for /config.ts
+```
+
+### Create Then Delete Cancels Out
+
+If you create a new file and then delete it before applying, the change is removed entirely:
+
+```ts
+await layer.writeFile("/tmp.ts", encoder.encode("temporary"));
+await layer.rm("/tmp.ts");
+
+const changes = layer.getChanges();
+// /tmp.ts does not appear in the changes
+```
+
+### Delete Then Recreate Becomes Update
+
+If you delete an existing file and recreate it, the result is an `update`:
+
+```ts
+// Assuming /index.ts exists on disk
+await layer.rm("/index.ts");
+await layer.writeFile("/index.ts", encoder.encode("new content"));
+
+const detail = layer.getChangeDetail("/index.ts");
+console.log(detail?.type); // "update"
+```
+
+## Practical Example: Dry Run
+
+```ts
+import { createLayer } from "@catmint-fs/core";
+
+async function dryRun(root: string) {
+  const layer = createLayer({ root });
+
+  // Perform operations...
+  await layer.writeFile("/new.ts", new TextEncoder().encode("content"));
+  await layer.rm("/deprecated.ts");
+
+  // Show what would change
+  const changes = layer.getChanges();
+  console.log("Pending changes:");
+  for (const change of changes) {
+    console.log(`  ${change.type.padEnd(8)} ${change.entryType.padEnd(10)} ${change.path}`);
+  }
+
+  // Don't apply — discard everything
+  layer.reset();
+  layer.dispose();
+}
+```
+
+## See Also
+
+- [Applying Changes](/fs/core/guides/applying-changes) — writing changes to the backing store
+- [Layer API](/fs/core/api/layer) — `getChanges()` and `getChangeDetail()` reference
+- [Types](/fs/core/api/types) — `ChangeEntry` and `ChangeDetail` type definitions

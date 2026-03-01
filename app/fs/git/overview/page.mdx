@@ -1,0 +1,91 @@
+# @catmint-fs/git
+
+A pure-TypeScript git implementation built on [@catmint-fs/core](/fs/core/overview) layers. Perform full git operations programmatically — no native dependencies, no shelling out to the `git` binary.
+
+## Features
+
+- **Pure TypeScript** — zero native dependencies, runs anywhere JavaScript runs
+- **Browser-compatible** — uses Web Crypto for SHA-1, `Uint8Array` for binary data, and `fetch()` for HTTP transport
+- **Adapter-agnostic** — works with any [@catmint-fs/core](/fs/core/overview) adapter (in-memory, Node.js fs, [SQLite](/fs/sqlite-adapter/overview), etc.)
+- **Git CLI compatible** — repositories created by this library are valid git repositories that can be read by the standard `git` CLI, and vice versa
+- **Full lifecycle** — init, commit, log, branch, checkout, merge, tag, stash, diff, reset, remote, fetch, push, pull, and clone
+
+## Architecture
+
+`@catmint-fs/git` is composed of layered components that mirror the internal structure of a git repository:
+
+| Layer | Responsibility |
+| --- | --- |
+| **ObjectDB** | Reads and writes loose and packed git objects (blobs, trees, commits, tags) |
+| **RefStore** | Manages references (branches, tags, HEAD, symbolic refs) |
+| **IndexFile** | Reads and writes the staging area (`.git/index`) |
+| **GitConfig** | Parses and writes `.git/config` |
+| **GitIgnore** | Evaluates `.gitignore` patterns |
+| **DiffEngine** | Computes file-level and hunk-level diffs |
+| **MergeEngine** | Performs three-way merges with conflict detection |
+| **StashManager** | Manages the stash stack |
+| **HttpTransport** | Implements the git smart HTTP protocol for fetch/push |
+
+The top-level `Repository` object composes these components and exposes a high-level API for everyday git operations.
+
+```txt
+┌─────────────────────────────────┐
+│          Repository             │
+├──────┬──────┬──────┬────────────┤
+│ObjectDB│RefStore│Index│GitConfig │
+├──────┴──────┴──────┴────────────┤
+│        @catmint-fs/core         │
+├─────────────────────────────────┤
+│   Adapter (memory / fs / sqlite)│
+└─────────────────────────────────┘
+```
+
+## Browser Compatibility
+
+Every component is designed to work in the browser out of the box:
+
+- **SHA-1 hashing** uses the Web Crypto API (`crypto.subtle.digest`)
+- **Binary data** is handled with `Uint8Array` — no Node.js `Buffer` dependency
+- **HTTP transport** uses the Fetch API for smart HTTP protocol operations
+- **No file-system assumptions** — all storage goes through the pluggable `@catmint-fs/core` layer
+
+This means you can run a full git workflow inside a browser tab backed by an in-memory or IndexedDB adapter.
+
+## Git CLI Compatibility
+
+Repositories created with `@catmint-fs/git` follow the standard git on-disk format:
+
+- Loose objects in `.git/objects/`
+- Pack files in `.git/objects/pack/`
+- Refs in `.git/refs/` and `.git/packed-refs`
+- Index file at `.git/index`
+- Config at `.git/config`
+- HEAD, MERGE_HEAD, and other special refs
+
+You can `cd` into a repository created by this library and run `git log`, `git status`, or any other git command — and it will work.
+
+## Quick Example
+
+```typescript
+import { createMemoryLayer } from "@catmint-fs/core";
+import { initRepository } from "@catmint-fs/git";
+
+const layer = createMemoryLayer();
+const repo = await initRepository(layer);
+
+// Write a file and commit
+await layer.writeFile("/README.md", "# My Project");
+await repo.add("README.md");
+await repo.commit({ message: "Initial commit", author: { name: "Alice", email: "alice@example.com" } });
+
+// Check the log
+const commits = await repo.log();
+console.log(commits[0].message); // "Initial commit"
+```
+
+## Next Steps
+
+- [Installation](/fs/git/installation)
+- [Quick Start](/fs/git/quick-start)
+- [Repository Guide](/fs/git/guides/repositories)
+- [API Reference: initRepository](/fs/git/api/initRepository)

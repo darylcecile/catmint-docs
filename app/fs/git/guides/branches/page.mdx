@@ -1,0 +1,97 @@
+# Branches
+
+Branches in `@catmint-fs/git` work exactly like they do in git — they are lightweight pointers to commits stored as refs.
+
+## Current Branch
+
+```typescript
+const branch = await repo.currentBranch();
+console.log(branch); // "main"
+```
+
+Returns `null` when HEAD is detached (pointing directly at a commit rather than a branch).
+
+## Creating Branches
+
+```typescript
+// Create a branch pointing at the current HEAD
+await repo.createBranch("feature/auth");
+
+// Create a branch pointing at a specific commit
+await repo.createBranch("hotfix/typo", { startPoint: "abc1234" });
+```
+
+Creating a branch does not switch to it. Use `checkout` to switch.
+
+## Listing Branches
+
+```typescript
+const branches = await repo.listBranches();
+// ["main", "feature/auth", "hotfix/typo"]
+```
+
+## Switching Branches
+
+```typescript
+await repo.checkout("feature/auth");
+console.log(await repo.currentBranch()); // "feature/auth"
+```
+
+`checkout` updates HEAD, the index, and the working tree to match the target branch. If there are uncommitted changes that would conflict with the checkout, it throws an error.
+
+### Detached HEAD
+
+You can check out a specific commit to enter detached HEAD state:
+
+```typescript
+await repo.checkout("abc1234");
+console.log(await repo.currentBranch()); // null
+```
+
+## Renaming Branches
+
+```typescript
+await repo.renameBranch("feature/auth", "feature/authentication");
+```
+
+## Deleting Branches
+
+```typescript
+await repo.deleteBranch("feature/auth");
+```
+
+You cannot delete the currently checked-out branch. Switch to a different branch first.
+
+## Common Workflow
+
+A typical feature branch workflow:
+
+```typescript
+// Start from main
+await repo.checkout("main");
+
+// Create and switch to a feature branch
+await repo.createBranch("feature/dashboard");
+await repo.checkout("feature/dashboard");
+
+// Make changes and commit
+await layer.writeFile("/src/dashboard.ts", "export function Dashboard() {}");
+await repo.add("src/dashboard.ts");
+await repo.commit({
+  message: "Add dashboard component",
+  author: { name: "Alice", email: "alice@example.com" },
+});
+
+// Switch back to main and merge
+await repo.checkout("main");
+await repo.merge("feature/dashboard");
+
+// Clean up the feature branch
+await repo.deleteBranch("feature/dashboard");
+```
+
+## See Also
+
+- [Merging](/fs/git/guides/merging)
+- [Staging and Commits](/fs/git/guides/staging-commits)
+- [API: Repository](/fs/git/api/repository)

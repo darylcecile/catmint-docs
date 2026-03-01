@@ -1,0 +1,129 @@
+# cloneRepository
+
+Clone a remote git repository into a [@catmint-fs/core](/fs/core/overview) layer. This is equivalent to `git clone`.
+
+## Import
+
+```typescript
+import { cloneRepository } from "@catmint-fs/git";
+```
+
+## Signature
+
+```typescript
+function cloneRepository(
+  layer: Layer,
+  options: CloneRepositoryOptions,
+): Promise<Repository>;
+```
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `layer` | `Layer` | Yes | A [@catmint-fs/core](/fs/core/overview) layer to store the cloned repository |
+| `options` | `CloneRepositoryOptions` | Yes | Clone configuration |
+
+### `CloneRepositoryOptions`
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `url` | `string` | — | **Required.** URL of the remote repository |
+| `branch` | `string` | Remote HEAD | Branch to check out after cloning |
+| `depth` | `number` | `undefined` | Limit history depth (shallow clone) |
+| `bare` | `boolean` | `false` | Clone as a bare repository |
+| `transport` | `GitTransport` | — | Transport implementation for network operations |
+
+## Return Value
+
+Returns a `Promise<Repository>` — a [Repository](/fs/git/api/repository) instance with the remote configured as `origin`.
+
+## Examples
+
+### Basic Clone
+
+```typescript
+import { createMemoryLayer } from "@catmint-fs/core";
+import { cloneRepository, httpTransport } from "@catmint-fs/git";
+
+const layer = createMemoryLayer();
+const repo = await cloneRepository(layer, {
+  url: "https://github.com/user/repo.git",
+  transport: httpTransport(),
+});
+
+const commits = await repo.log();
+console.log(`Cloned with ${commits.length} commits`);
+```
+
+### Clone a Specific Branch
+
+```typescript
+const repo = await cloneRepository(layer, {
+  url: "https://github.com/user/repo.git",
+  branch: "develop",
+  transport: httpTransport(),
+});
+
+console.log(await repo.currentBranch()); // "develop"
+```
+
+### Shallow Clone
+
+```typescript
+const repo = await cloneRepository(layer, {
+  url: "https://github.com/user/repo.git",
+  depth: 1,
+  transport: httpTransport(),
+});
+
+const commits = await repo.log();
+console.log(commits.length); // 1
+```
+
+### Bare Clone
+
+```typescript
+const repo = await cloneRepository(layer, {
+  url: "https://github.com/user/repo.git",
+  bare: true,
+  transport: httpTransport(),
+});
+```
+
+### Authenticated Clone
+
+```typescript
+const transport = httpTransport({
+  headers: {
+    Authorization: "Bearer ghp_xxxxxxxxxxxx",
+  },
+});
+
+const repo = await cloneRepository(layer, {
+  url: "https://github.com/user/private-repo.git",
+  transport,
+});
+```
+
+### Clone to Persistent Storage
+
+```typescript
+import { createSqliteLayer } from "@catmint-fs/sqlite-adapter";
+import { cloneRepository, httpTransport } from "@catmint-fs/git";
+
+const layer = createSqliteLayer("local-repo.db");
+const repo = await cloneRepository(layer, {
+  url: "https://github.com/user/repo.git",
+  transport: httpTransport(),
+});
+```
+
+## See Also
+
+- [initRepository](/fs/git/api/initRepository)
+- [openRepository](/fs/git/api/openRepository)
+- [httpTransport](/fs/git/api/httpTransport)
+- [Repository API](/fs/git/api/repository)
+- [Repositories Guide](/fs/git/guides/repositories)
+- [Remote Operations Guide](/fs/git/guides/remotes)

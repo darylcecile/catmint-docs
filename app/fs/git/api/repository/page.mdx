@@ -1,0 +1,634 @@
+# Repository
+
+The `Repository` class is the main entry point for git operations. It is returned by [initRepository](/fs/git/api/initRepository), [openRepository](/fs/git/api/openRepository), and [cloneRepository](/fs/git/api/cloneRepository).
+
+## Import
+
+`Repository` instances are created through the factory functions — you do not construct them directly.
+
+```typescript
+import { initRepository, openRepository, cloneRepository } from "@catmint-fs/git";
+```
+
+## Branching
+
+### currentBranch
+
+Returns the name of the current branch, or `null` if HEAD is detached.
+
+```typescript
+currentBranch(): Promise<string | null>
+```
+
+```typescript
+const branch = await repo.currentBranch();
+console.log(branch); // "main"
+```
+
+### createBranch
+
+Create a new branch.
+
+```typescript
+createBranch(name: string, options?: { startPoint?: string }): Promise<void>
+```
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | Yes | Branch name |
+| `options.startPoint` | `string` | No | Commit OID or ref to branch from (defaults to HEAD) |
+
+```typescript
+await repo.createBranch("feature/auth");
+await repo.createBranch("hotfix", { startPoint: "abc1234" });
+```
+
+### deleteBranch
+
+Delete a branch. Cannot delete the currently checked-out branch.
+
+```typescript
+deleteBranch(name: string): Promise<void>
+```
+
+```typescript
+await repo.deleteBranch("feature/auth");
+```
+
+### listBranches
+
+List all local branches.
+
+```typescript
+listBranches(): Promise<string[]>
+```
+
+```typescript
+const branches = await repo.listBranches();
+// ["main", "develop", "feature/auth"]
+```
+
+### renameBranch
+
+Rename a branch.
+
+```typescript
+renameBranch(oldName: string, newName: string): Promise<void>
+```
+
+```typescript
+await repo.renameBranch("feature/auth", "feature/authentication");
+```
+
+### checkout
+
+Switch to a branch or commit.
+
+```typescript
+checkout(ref: string): Promise<void>
+```
+
+```typescript
+await repo.checkout("feature/auth");
+await repo.checkout("abc1234"); // Detached HEAD
+```
+
+---
+
+## Staging
+
+### add
+
+Stage a file for the next commit.
+
+```typescript
+add(path: string): Promise<void>
+```
+
+```typescript
+await repo.add("src/index.ts");
+```
+
+### unstage
+
+Remove a file from the staging area without deleting it from the working tree.
+
+```typescript
+unstage(path: string): Promise<void>
+```
+
+```typescript
+await repo.unstage("src/index.ts");
+```
+
+### remove
+
+Stage a file deletion. Removes the file from both the index and the working tree.
+
+```typescript
+remove(path: string): Promise<void>
+```
+
+```typescript
+await repo.remove("old-file.ts");
+```
+
+### status
+
+Return the status of all tracked and untracked files.
+
+```typescript
+status(): Promise<StatusEntry[]>
+```
+
+```typescript
+const entries = await repo.status();
+for (const entry of entries) {
+  console.log(entry.path, entry.indexStatus, entry.workingStatus);
+}
+```
+
+See [StatusEntry](/fs/git/api/types) for the full type definition.
+
+### listFiles
+
+List all files tracked in the index.
+
+```typescript
+listFiles(): Promise<string[]>
+```
+
+```typescript
+const files = await repo.listFiles();
+```
+
+### isIgnored
+
+Check if a path matches `.gitignore` patterns.
+
+```typescript
+isIgnored(path: string): Promise<boolean>
+```
+
+```typescript
+const ignored = await repo.isIgnored("node_modules/pkg/index.js");
+```
+
+---
+
+## Commits
+
+### commit
+
+Create a new commit from the current index.
+
+```typescript
+commit(options: CommitOptions): Promise<string>
+```
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `options.message` | `string` | Yes | Commit message |
+| `options.author` | `Author` | Yes | Author information |
+| `options.committer` | `Author` | No | Committer information (defaults to `author`) |
+
+Returns the OID of the new commit.
+
+```typescript
+const oid = await repo.commit({
+  message: "Initial commit",
+  author: { name: "Alice", email: "alice@example.com" },
+});
+```
+
+### log
+
+Retrieve the commit history.
+
+```typescript
+log(options?: LogOptions): Promise<CommitInfo[]>
+```
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `options.maxCount` | `number` | No | Maximum number of commits to return |
+| `options.path` | `string` | No | Only include commits affecting this path |
+
+```typescript
+const commits = await repo.log();
+const recent = await repo.log({ maxCount: 10 });
+const fileHistory = await repo.log({ path: "src/index.ts" });
+```
+
+### readCommit
+
+Read a specific commit object by its OID.
+
+```typescript
+readCommit(oid: string): Promise<CommitInfo>
+```
+
+```typescript
+const commit = await repo.readCommit("abc1234");
+console.log(commit.message, commit.tree, commit.parents);
+```
+
+---
+
+## Merging
+
+### merge
+
+Merge a branch into the current branch.
+
+```typescript
+merge(branch: string): Promise<MergeResult>
+```
+
+Returns a [MergeResult](/fs/git/api/types) describing the outcome.
+
+```typescript
+const result = await repo.merge("feature/login");
+if (result.type === "conflict") {
+  console.log("Conflicts:", result.conflicts);
+}
+```
+
+### abortMerge
+
+Abort a conflicted merge, restoring the pre-merge state.
+
+```typescript
+abortMerge(): Promise<void>
+```
+
+```typescript
+await repo.abortMerge();
+```
+
+---
+
+## Tags
+
+### createTag
+
+Create a tag. Supports both lightweight and annotated tags.
+
+```typescript
+createTag(name: string, options?: CreateTagOptions): Promise<void>
+```
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | Yes | Tag name |
+| `options.target` | `string` | No | Commit OID to tag (defaults to HEAD) |
+| `options.message` | `string` | No | Tag message (creates an annotated tag) |
+| `options.tagger` | `Author` | No | Tagger information (required for annotated tags) |
+
+```typescript
+await repo.createTag("v1.0.0");
+await repo.createTag("v1.0.0", {
+  message: "Release 1.0.0",
+  tagger: { name: "Alice", email: "alice@example.com" },
+});
+```
+
+### deleteTag
+
+Delete a tag.
+
+```typescript
+deleteTag(name: string): Promise<void>
+```
+
+```typescript
+await repo.deleteTag("v1.0.0");
+```
+
+### listTags
+
+List all tags.
+
+```typescript
+listTags(): Promise<string[]>
+```
+
+```typescript
+const tags = await repo.listTags();
+```
+
+---
+
+## Diff
+
+### diff
+
+Compute file and hunk-level diffs.
+
+```typescript
+diff(options?: DiffOptions): Promise<DiffEntry[]>
+```
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `options.staged` | `boolean` | No | If `true`, diff index vs HEAD instead of working tree vs index |
+
+```typescript
+// Working tree vs index
+const diffs = await repo.diff();
+
+// Staged changes (index vs HEAD)
+const staged = await repo.diff({ staged: true });
+```
+
+See [DiffEntry](/fs/git/api/types) for the full type definition.
+
+---
+
+## Stash
+
+### stash
+
+Save uncommitted changes to the stash stack.
+
+```typescript
+stash(options: StashOptions): Promise<void>
+```
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `options.message` | `string` | No | Description of the stashed changes |
+| `options.author` | `Author` | Yes | Author information for the stash commit |
+
+```typescript
+await repo.stash({
+  message: "WIP: dashboard",
+  author: { name: "Alice", email: "alice@example.com" },
+});
+```
+
+### listStashes
+
+List all stash entries.
+
+```typescript
+listStashes(): Promise<StashEntry[]>
+```
+
+```typescript
+const stashes = await repo.listStashes();
+```
+
+### applyStash
+
+Apply a stash without removing it from the stack.
+
+```typescript
+applyStash(index: number): Promise<void>
+```
+
+```typescript
+await repo.applyStash(0);
+```
+
+### popStash
+
+Apply a stash and remove it from the stack.
+
+```typescript
+popStash(index: number): Promise<void>
+```
+
+```typescript
+await repo.popStash(0);
+```
+
+### dropStash
+
+Remove a stash entry without applying it.
+
+```typescript
+dropStash(index: number): Promise<void>
+```
+
+```typescript
+await repo.dropStash(0);
+```
+
+---
+
+## Reset
+
+### reset
+
+Reset the current branch to a specific commit.
+
+```typescript
+reset(target: string, options?: ResetOptions): Promise<void>
+```
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `target` | `string` | Yes | Commit OID or ref to reset to |
+| `options.mode` | `"soft" \| "mixed" \| "hard"` | No | Reset mode (default: `"mixed"`) |
+
+| Mode | HEAD | Index | Working Tree |
+| --- | --- | --- | --- |
+| `soft` | Moved | Unchanged | Unchanged |
+| `mixed` | Moved | Reset | Unchanged |
+| `hard` | Moved | Reset | Reset |
+
+```typescript
+await repo.reset("HEAD~1", { mode: "soft" });
+await repo.reset("abc1234", { mode: "hard" });
+```
+
+---
+
+## Remotes
+
+### addRemote
+
+Add a remote.
+
+```typescript
+addRemote(name: string, url: string): Promise<void>
+```
+
+```typescript
+await repo.addRemote("origin", "https://github.com/user/repo.git");
+```
+
+### listRemotes
+
+List all configured remotes.
+
+```typescript
+listRemotes(): Promise<RemoteInfo[]>
+```
+
+```typescript
+const remotes = await repo.listRemotes();
+// [{ name: "origin", url: "https://github.com/user/repo.git" }]
+```
+
+### deleteRemote
+
+Remove a remote.
+
+```typescript
+deleteRemote(name: string): Promise<void>
+```
+
+```typescript
+await repo.deleteRemote("origin");
+```
+
+### setUpstream
+
+Set the upstream (tracking) branch for a local branch.
+
+```typescript
+setUpstream(branch: string, upstream: string): Promise<void>
+```
+
+```typescript
+await repo.setUpstream("main", "origin/main");
+```
+
+### fetch
+
+Download objects and refs from a remote.
+
+```typescript
+fetch(remote: string, options?: FetchOptions): Promise<void>
+```
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `remote` | `string` | Yes | Remote name |
+| `options.transport` | `GitTransport` | No | Transport for network operations |
+
+```typescript
+import { httpTransport } from "@catmint-fs/git";
+await repo.fetch("origin", { transport: httpTransport() });
+```
+
+### push
+
+Upload local commits to a remote.
+
+```typescript
+push(remote: string, options?: PushOptions): Promise<void>
+```
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `remote` | `string` | Yes | Remote name |
+| `options.branch` | `string` | No | Branch to push (defaults to current) |
+| `options.transport` | `GitTransport` | No | Transport for network operations |
+
+```typescript
+await repo.push("origin", { transport: httpTransport() });
+```
+
+### pull
+
+Fetch and merge from a remote.
+
+```typescript
+pull(remote: string, options?: PullOptions): Promise<void>
+```
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `remote` | `string` | Yes | Remote name |
+| `options.branch` | `string` | No | Remote branch to pull |
+| `options.transport` | `GitTransport` | No | Transport for network operations |
+
+```typescript
+await repo.pull("origin", { branch: "main", transport: httpTransport() });
+```
+
+---
+
+## Config
+
+### getConfig
+
+Read a configuration value.
+
+```typescript
+getConfig(key: string): Promise<string | undefined>
+```
+
+```typescript
+const name = await repo.getConfig("user.name");
+```
+
+### setConfig
+
+Write a configuration value.
+
+```typescript
+setConfig(key: string, value: string): Promise<void>
+```
+
+```typescript
+await repo.setConfig("user.name", "Alice");
+```
+
+### deleteConfig
+
+Remove a configuration value.
+
+```typescript
+deleteConfig(key: string): Promise<void>
+```
+
+```typescript
+await repo.deleteConfig("user.email");
+```
+
+---
+
+## Refs
+
+### resolveRef
+
+Resolve a ref (branch name, tag, symbolic ref) to a commit OID.
+
+```typescript
+resolveRef(ref: string): Promise<string>
+```
+
+```typescript
+const oid = await repo.resolveRef("refs/heads/main");
+const tagOid = await repo.resolveRef("refs/tags/v1.0.0");
+const headOid = await repo.resolveRef("HEAD");
+```
+
+### listRefs
+
+List all refs in the repository.
+
+```typescript
+listRefs(): Promise<RefEntry[]>
+```
+
+```typescript
+const refs = await repo.listRefs();
+for (const ref of refs) {
+  console.log(ref.name, ref.oid);
+}
+```
+
+---
+
+## See Also
+
+- [initRepository](/fs/git/api/initRepository)
+- [openRepository](/fs/git/api/openRepository)
+- [cloneRepository](/fs/git/api/cloneRepository)
+- [httpTransport](/fs/git/api/httpTransport)
+- [Types Reference](/fs/git/api/types)

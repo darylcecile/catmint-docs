@@ -1,0 +1,168 @@
+# Merging
+
+`@catmint-fs/git` supports fast-forward merges, merge commits, and conflict detection. The merge engine performs a full three-way merge when necessary.
+
+## Basic Merge
+
+```typescript
+// Merge feature branch into the current branch
+const result = await repo.merge("feature/login");
+```
+
+The `merge` method returns an object describing the outcome:
+
+```typescript
+interface MergeResult {
+  type: "fast-forward" | "merge-commit" | "already-up-to-date" | "conflict";
+  oid?: string;         // The resulting commit OID (for fast-forward and merge-commit)
+  conflicts?: string[]; // Array of conflicted file paths (when type is "conflict")
+}
+```
+
+## Merge Strategies
+
+### Fast-Forward
+
+When the current branch has no commits ahead of the target, git can simply move the branch pointer forward:
+
+```typescript
+await repo.checkout("main");
+const result = await repo.merge("feature/login");
+
+if (result.type === "fast-forward") {
+  console.log("Fast-forwarded to", result.oid);
+}
+```
+
+### Merge Commit
+
+When both branches have diverged, a merge commit is created with two parents:
+
+```typescript
+const result = await repo.merge("feature/login");
+
+if (result.type === "merge-commit") {
+  const commit = await repo.readCommit(result.oid!);
+  console.log(commit.parents.length); // 2
+}
+```
+
+### Already Up To Date
+
+If the target branch is an ancestor of the current branch, no merge is needed:
+
+```typescript
+const result = await repo.merge("feature/old");
+console.log(result.type); // "already-up-to-date"
+```
+
+## Conflict Handling
+
+When the same file has been modified differently on both branches, the merge produces conflicts:
+
+```typescript
+const result = await repo.merge("feature/conflicting");
+
+if (result.type === "conflict") {
+  console.log("Conflicts in:", result.conflicts);
+  // ["src/config.ts", "README.md"]
+}
+```
+
+### Resolving Conflicts
+
+When a conflict occurs, the conflicting files in the working tree contain standard git conflict markers:
+
+```
+<<<<<<< HEAD
+const port = 3000;
+=======
+const port = 8080;
+>>>>>>> feature/conflicting
+```
+
+To resolve:
+
+1. Edit the conflicting files to resolve the markers
+2. Stage the resolved files with `add`
+3. Complete the merge with a `commit`
+
+```typescript
+const result = await repo.merge("feature/conflicting");
+
+if (result.type === "conflict") {
+  // Read, resolve, and write the conflicted file
+  const content = await layer.readFile("src/config.ts", "utf-8");
+  const resolved = content
+    .replace(/<<<<<<< HEAD\n/, "")
+    .replace(/=======\n.*\n>>>>>>> .*\n/s, "");
+  await layer.writeFile("/src/config.ts", resolved);
+
+  // Stage and commit the resolution
+  await repo.add("src/config.ts");
+  await repo.commit({
+    message: "Merge feature/conflicting, resolve config conflict",
+    author: { name: "Alice", email: "alice@example.com" },
+  });
+}
+```
+
+### Aborting a Merge
+
+If you want to cancel a conflicted merge and restore the pre-merge state:
+
+```typescript
+await repo.abortMerge();
+```
+
+This resets HEAD, the index, and the working tree to the state before the merge was attempted.
+
+## Merge with Custom Commit Message
+
+For merge commits, a default message is generated (e.g., `"Merge branch 'feature/login'"`). You can provide a custom author for the merge commit via repository config:
+
+```typescript
+await repo.setConfig("user.name", "Alice");
+await repo.setConfig("user.email", "alice@example.com");
+
+const result = await repo.merge("feature/login");
+```
+
+## Full Merge Workflow
+
+```typescript
+import { createMemoryLayer } from "@catmint-fs/core";
+import { initRepository } from "@catmint-fs/git";
+
+const layer = createMemoryLayer();
+const repo = await initRepository(layer);
+const author = { name: "Alice", email: "alice@example.com" };
+
+// Initial commit on main
+await layer.writeFile("/app.ts", "export const version = 1;");
+await repo.add("app.ts");
+await repo.commit({ message: "Initial commit", author });
+
+// Create a feature branch with changes
+await repo.createBranch("feature/v2");
+await repo.checkout("feature/v2");
+await layer.writeFile("/app.ts", "export const version = 2;");
+await repo.add("app.ts");
+await repo.commit({ message: "Bump version to 2", author });
+
+// Back to main
+await repo.checkout("main");
+
+// Merge the feature branch
+const result = await repo.merge("feature/v2");
+console.log(result.type); // "fast-forward"
+
+// Clean up
+await repo.deleteBranch("feature/v2");
+```
+
+## See Also
+
+- [Branching](/fs/git/guides/branches)
+- [Diffing](/fs/git/guides/diffing)
+- [API: Repository](/fs/git/api/repository)

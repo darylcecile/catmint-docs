@@ -1,0 +1,141 @@
+# middleware
+
+Wrap a middleware handler with configuration options. Middleware files (`middleware.ts`) are placed in route directories and automatically collected by the file-based router. They run before a request reaches a page or endpoint.
+
+A bare `export default` works for simple middleware — the `middleware()` wrapper is only needed when you want to configure inheritance behavior.
+
+## Import
+
+```ts
+import { middleware } from 'catmint/middleware'
+```
+
+## Signature
+
+```ts
+function middleware(
+  handler: (
+    req: Request,
+    next: () => Promise<Response>,
+  ) => Promise<Response> | Response,
+  options?: MiddlewareOptions,
+): MiddlewareHandler
+```
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `handler` | `(req: Request, next: () => Promise<Response>) => Promise<Response> \| Response` | Yes | The middleware function. Receives the request and a `next` function to pass control to the next handler. |
+| `options` | `MiddlewareOptions` | No | Middleware configuration options. |
+
+### `MiddlewareOptions`
+
+```ts
+interface MiddlewareOptions {
+  inherit?: boolean
+  name?: string
+}
+```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `inherit` | `boolean` | `true` | Whether to run parent middleware first. Set to `false` to start a new middleware chain. |
+| `name` | `string` | — | Explicit name for debugging and dev tooling. |
+
+## Return Value
+
+Returns a `MiddlewareHandler` — the handler function with attached `__catmintMiddleware` metadata.
+
+```ts
+type MiddlewareHandler = ((
+  req: Request,
+  next: () => Promise<Response>,
+) => Promise<Response> | Response) & {
+  __catmintMiddleware?: MiddlewareOptions
+}
+```
+
+## Resolution and Execution
+
+**Resolution** (tip-to-root): Catmint walks from the matched route's directory up to `app/`, collecting `middleware.ts` files. If any middleware uses `{ inherit: false }`, ancestor collection stops.
+
+**Execution** (root-to-tip): The outermost middleware runs first. Each middleware either:
+
+- **Calls `next()`** — passes control to the next handler. The return value is the `Response` from downstream, which can be inspected or modified.
+- **Returns a `Response` directly** — short-circuits the chain. All remaining middleware and the route handler are bypassed.
+
+```txt
+A (root) → B (dashboard) → handler
+
+A runs → calls next() → B runs → calls next() → handler
+                                                ← Response
+                         ← B can modify response
+← A can modify response
+→ Response sent to client
+```
+
+## Compilation Model
+
+At build time, all middleware for a route is compiled into a single composed function. The `next()` call is sugar for invoking the next handler directly — there is no runtime middleware resolution or dynamic dispatch.
+
+## Examples
+
+```ts
+// app/middleware.ts — runs for every request
+export default async function (req: Request, next: () => Promise<Response>) {
+  const start = Date.now()
+  const response = await next()
+  response.headers.set('X-Response-Time', `${Date.now() - start}ms`)
+  return response
+}
+```
+
+```ts
+// app/dashboard/middleware.ts — auth check
+import { middleware } from 'catmint/middleware'
+import { redirect } from 'catmint/routing'
+
+export default middleware(async (req, next) => {
+  const session = await getSession(req)
+  if (!session) {
+    redirect('/login')
+  }
+  return next()
+}, { name: 'dashboard-auth' })
+```
+
+```ts
+// app/api/public/middleware.ts — standalone (no parent middleware)
+import { middleware } from 'catmint/middleware'
+
+export default middleware(async (req, next) => {
+  if (isRateLimited(req)) {
+    return Response.json({ error: 'Too many requests' }, { status: 429 })
+  }
+  return next()
+}, { inherit: false })
+```
+
+### Directory Structure
+
+```txt
+app/
+├── middleware.ts              # Runs for ALL requests (logging, CORS)
+├── dashboard/
+│   ├── middleware.ts          # Auth check — inherits root middleware
+│   └── page.tsx               # root → dashboard → page
+├── api/
+│   ├── middleware.ts          # API auth — inherits root middleware
+│   └── public/
+│       ├── middleware.ts      # { inherit: false } — rate limit only
+│       └── health/
+│           └── endpoint.ts   # public middleware only (no root or api middleware)
+```
+
+## See Also
+
+- [Layout](/framework/api/layout)
+- [redirect](/framework/api/redirect)
+- [Endpoints](/framework/api/endpoints)
+- [createServerFn](/framework/api/createServerFn)
